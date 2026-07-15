@@ -421,7 +421,7 @@ const ESTADO_COLOR={
   'realizado':'b-verde','por vencer':'b-ambar','vencido':'b-rojo',
   'préstamo':'b-azul','alquiler':'b-oliva','reparación':'b-ambar',
   'alquilada':'b-oliva','en reparación':'b-ambar',
-  'certificada':'b-verde','en certificación':'b-azul','abierta':'b-gris','liberado':'b-verde',
+  'certificada':'b-verde','en certificación':'b-azul','abierta':'b-gris','liberado':'b-verde','anulada':'b-rojo',
   'desmontaje':'b-ambar','transporte':'b-azul','montaje':'b-verde',
 };
 function badge(v){ const cls=ESTADO_COLOR[String(v||'').toLowerCase()]||'b-gris'; return '<span class="badge '+cls+'">'+esc(v)+'</span>'; }
@@ -655,26 +655,29 @@ const Data = {
 let current='compras';
 
 /* ===== ROLES ===== */
-let ROLE={tesorero:true, confidencial:true};
+let ROLE={comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true};
 let DEMO_ROLE='admin';
 const DEMO_ROLES={
-  admin:{tesorero:true, confidencial:true, lbl:'Admin (todo)'},
-  comprador:{tesorero:false, confidencial:false, lbl:'Comprador'},
-  certificador:{tesorero:false, confidencial:false, lbl:'Certificador'},
-  tesorero:{tesorero:true, confidencial:false, lbl:'Tesorero'},
+  admin:{comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, lbl:'Admin (todo)'},
+  comprador:{comprador:true, certificador:false, tesorero:false, confidencial:false, admin:false, lbl:'Comprador'},
+  certificador:{comprador:false, certificador:true, tesorero:false, confidencial:false, admin:false, lbl:'Certificador (técnica)'},
+  tesorero:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, lbl:'Tesorero'},
 };
-function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={tesorero:r.tesorero, confidencial:r.confidencial}; }
+function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={comprador:r.comprador, certificador:r.certificador, tesorero:r.tesorero, confidencial:r.confidencial, admin:r.admin}; }
 async function loadRole(){
   if(DEMO_MODE){ applyDemoRole(); return; }
-  ROLE={tesorero:false, confidencial:false};   // por defecto, acceso básico
+  ROLE={comprador:false, certificador:false, tesorero:false, confidencial:false, admin:false};   // por defecto, sin permisos
   try{
     const email=(AUTH_USER&&AUTH_USER.email)||'';
     if(!email) return;
     const rows=await sbFetch('/usuarios_autorizados?select=*&email=eq.'+encodeURIComponent(email));
     const u=rows&&rows[0];
-    if(u) ROLE={tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial};
-  }catch(e){ /* si falla la consulta, queda acceso básico */ }
+    if(u) ROLE={comprador:!!u.es_comprador, certificador:!!u.es_certificador, tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial, admin:!!u.es_admin};
+  }catch(e){ /* si falla, queda sin permisos */ }
 }
+function canEditOG(){ return ROLE.comprador||ROLE.admin; }
+function canCert(){ return ROLE.certificador||ROLE.admin; }
+function canPago(){ return ROLE.tesorero||ROLE.admin; }
 function setDemoRole(v){ DEMO_ROLE=v; applyDemoRole(); buildNav(); go((current==='tesoreria' && !ROLE.tesorero)?'compras':current); }
 window.setDemoRole=setDemoRole;
 
@@ -699,7 +702,7 @@ function setHeader(view){
   if(view==='mantenimiento'){
     setMantActions();
   }else if(view==='compras'){
-    document.getElementById('topActions').innerHTML='<button class="btn ghost" onclick="exportOGExcel()">Exportar Excel</button><button class="btn ghost" onclick="openCertPanel()">Certificar</button><button class="btn" onclick="openOG()">'+ICO.plus+'Nueva OG</button>';
+    document.getElementById('topActions').innerHTML='<button class="btn ghost" onclick="exportOGExcel()">Exportar Excel</button>'+(canCert()?'<button class="btn ghost" onclick="openCertPanel()">Certificar</button>':'')+(canEditOG()?'<button class="btn" onclick="openOG()">'+ICO.plus+'Nueva OG</button>':'');
   }else if(view==='diccionarios'){
     document.getElementById('topActions').innerHTML='';
   }else{
@@ -1625,6 +1628,11 @@ let OG_ITEMS=[];   // ítems de la cotización en edición (form OG)
 function ogList(){ return (mem.ogs||[]).slice(); }
 function ogById(id){ return (mem.ogs||[]).find(o=>String(o.id)===String(id)); }
 function certsOf(ogId){ return (mem.certificados||[]).filter(c=>String(c.og_id)===String(ogId)).slice().sort((a,b)=>(+a.id)-(+b.id)); }
+function nextCertNum(o){
+  const certs=certsOf(o.id); let maxN=0;
+  certs.forEach(c=>{ const m=String(c.numero||'').match(/-(\d+)$/); if(m) maxN=Math.max(maxN,+m[1]); });
+  return (o.numero||'OG')+'-'+(maxN+1);
+}
 function itemTotal(it){ return (+it.cant||0)*(+it.precio_unit||0); }
 function ogTotal(og){ return (og.items&&og.items.length) ? og.items.reduce((a,it)=>a+itemTotal(it),0) : (+og.monto_total||0); }
 function certMonto(c, og){
@@ -1645,7 +1653,7 @@ function ogPendPagoPct(og){ return Math.max(0, ogLiberadoPct(og)-ogPagadoPct(og)
 const CAJAS={ARS:{cod:'11110071',nombre:'CAJA PESOS 2'}, USD:{cod:'11110073',nombre:'CAJA DOLARES 3'}};
 function cajaMovs(mon){ return (mem.pagos||[]).filter(p=>p.moneda_pago===mon); }
 function cajaSaldo(mon){ const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; return ini - cajaMovs(mon).reduce((a,p)=>a+(+p.importe_pago||0),0); }
-function ogEstado(og){ const a=ogAcumPct(og.id); return a>=99.999?'Certificada':(a>0?'En certificación':'Abierta'); }
+function ogEstado(og){ if(og.anulada) return 'Anulada'; const a=ogAcumPct(og.id); return a>=99.999?'Certificada':(a>0?'En certificación':'Abierta'); }
 function proyNombre(o){ if(o.proyecto_nombre) return o.proyecto_nombre; const p=(typeof DIC!=='undefined'?DIC.proyectos:[]).find(x=>x.codigo===o.proyecto); return p?p.nombre:(o.proyecto||'—'); }
 function clasifDesc(cod){ const c=CLASIF_RENGLON.find(x=>x.codigo===cod); return c?c.desc:(cod||''); }
 function artDesc(cod){ const a=(typeof DIC!=='undefined'?DIC.articulos:[]).find(x=>x.codigo===cod); return a?a.descripcion:''; }
@@ -1772,8 +1780,9 @@ async function renderCompras(){
         +'<td style="min-width:110px">'+pbar(ogAcumPct(o.id))+'</td>'
         +'<td>'+badge(ogEstado(o))+'</td>'
         +'<td><div class="row-actions">'
-        +'<button class="iconbtn" title="Ver / editar OG" onclick="openOG('+o.id+')">'+ICO.edit+'</button>'
-        +'<button class="iconbtn del" title="Eliminar OG" onclick="askDelOG('+o.id+')">'+ICO.del+'</button></div></td></tr>';
+        +((canEditOG()&&!o.anulada)?'<button class="iconbtn" title="Ver / editar OG" onclick="openOG('+o.id+')">'+ICO.edit+'</button>':'')
+        +((canEditOG()&&!o.anulada)?'<button class="iconbtn del" title="Anular OG" onclick="askAnularOG('+o.id+')">'+ICO.del+'</button>':'')
+        +'</div></td></tr>';
       return head+(exp?ogDetail(o):'');
     }).join('');
     body='<table class="grid og-grid"><thead><tr><th>OG</th><th>Objeto</th><th>Detalle</th><th>Total</th><th>Avance</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead><tbody>'+tr+'</tbody></table>';
@@ -2098,6 +2107,7 @@ function pgCalc(){
 }
 window.pgCalc=pgCalc;
 async function savePago(ogId){
+  if(!canPago()){ toast('Solo el tesorero puede registrar pagos.'); return; }
   const o=ogById(ogId); const monOG=ogMonedaCode(o);
   const pct=+document.getElementById('pg_pct').value||0;
   const pend=ogPendPagoPct(o);
@@ -2116,12 +2126,23 @@ async function savePago(ogId){
   closeModal(); toast('Pago registrado'); renderTesoreria();
 }
 window.savePago=savePago;
+function askDelPago(id){
+  openModal('Eliminar pago','<p style="margin:0;font-size:14px;color:#5f5c52;line-height:1.5">¿Eliminar este pago? La OG vuelve a quedar pendiente de pago y sus certificados podrán editarse de nuevo.</p>',
+    '<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn danger" onclick="confirmDelPago('+id+')">Eliminar</button>');
+}
+async function confirmDelPago(id){
+  if(!canPago()){ toast('Solo el tesorero puede eliminar pagos.'); return; }
+  if(DEMO_MODE){ mem.pagos=(mem.pagos||[]).filter(p=>String(p.id)!==String(id)); }
+  else { await sbFetch('/pagos?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'}); await reloadDB(); }
+  closeModal(); toast('Pago eliminado'); renderTesoreria();
+}
+window.askDelPago=askDelPago; window.confirmDelPago=confirmDelPago;
 
 function arqueoView(){
   const card=(mon)=>{ const c=CAJAS[mon]; const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; const movs=cajaMovs(mon);
     const egresos=movs.reduce((a,p)=>a+(+p.importe_pago||0),0); const saldo=ini-egresos;
     const simb=mon==='USD'?'US$ ':'$ '; const fmt=v=>simb+(+v||0).toLocaleString('es-AR',{maximumFractionDigits:2});
-    const rows=movs.length?movs.slice().sort((a,b)=>(a.fecha<b.fecha?1:-1)).map(p=>'<tr><td>'+esc(fmtDate(p.fecha))+'</td><td>OG '+esc(p.numero)+'</td><td>'+esc(p.medio||'')+'</td><td style="text-align:right;color:var(--bad)">-'+fmt(p.importe_pago).replace(simb,simb)+'</td></tr>').join(''):'<tr><td colspan="4" style="color:var(--muted)">Sin movimientos</td></tr>';
+    const rows=movs.length?movs.slice().sort((a,b)=>(a.fecha<b.fecha?1:-1)).map(p=>'<tr><td>'+esc(fmtDate(p.fecha))+'</td><td>OG '+esc(p.numero)+'</td><td>'+esc(p.medio||'')+'</td><td style="text-align:right;color:var(--bad)">-'+fmt(p.importe_pago).replace(simb,simb)+'</td><td style="text-align:right">'+((canPago()&&p.id!=null)?'<button class="iconbtn del" title="Eliminar pago" onclick="askDelPago('+p.id+')">'+ICO.del+'</button>':'')+'</td></tr>').join(''):'<tr><td colspan="5" style="color:var(--muted)">Sin movimientos</td></tr>';
     return '<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>'+c.nombre+' <span style="font-size:12px;color:var(--muted);font-weight:400">'+c.cod+'</span></h3></div>'
       +'<div style="display:flex;gap:24px;flex-wrap:wrap;padding:4px 4px 12px">'
       +'<div><div style="font-size:11.5px;color:var(--muted)">Saldo inicial</div><input type="number" value="'+ini+'" onchange="setSaldoIni(\''+mon+'\',this.value)" style="border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;width:160px;font-size:14px"></div>'
@@ -2186,7 +2207,7 @@ window.renderCertPanel=renderCertPanel;
 /* ---- Alta / edición de OG ---- */
 function openOG(id){
   const o = id!=null ? ogById(id) : null; const cur=o||{};
-  OG_ITEMS = (cur.items||[]).map(it=>({...it}));
+  OG_ITEMS = (cur.items||[]).map((it,idx)=>({...it, _locked: o ? itemAcumPct(o, idx)>0 : false}));
   const nextNum = String(Math.max(1999,...(mem.ogs||[]).map(x=>+x.numero||0))+1);
   const optSel=(arr,val)=>'<option value="">— elegí —</option>'+arr.map(x=>'<option'+(x===val?' selected':'')+'>'+esc(x)+'</option>').join('');
   const provOpts='<option value="">— elegí —</option>'+(typeof DIC!=='undefined'?DIC.proveedores:[]).map(v=>'<option value="'+esc(v.codigo)+'"'+(v.codigo===cur.proveedor_cod?' selected':'')+'>'+esc(v.codigo)+' — '+esc(v.razon||v.comercial)+'</option>').join('');
@@ -2200,7 +2221,7 @@ function openOG(id){
   const desvOpts=optSel(DESVIO_OPC,cur.desvio);
   const urgOpts=optSel(['No','Sí'],cur.compra_urgente);
   const hoy=new Date().toISOString().slice(0,10);
-  const body='<div class="frow c2"><div class="field"><label>N° OG</label><input id="og_numero" type="text" value="'+esc(cur.numero||nextNum)+'"><div style="font-size:11px;color:var(--muted);margin-top:4px">Desde 2000 (las &lt; 2000 son de Tango).</div></div>'
+  const body='<div class="frow c2"><div class="field"><label>N° OG</label><input id="og_numero" type="text" readonly value="'+esc(cur.numero || (DEMO_MODE?nextNum:''))+'" placeholder="Se asigna al guardar" style="background:#f3f1e8"><div style="font-size:11px;color:var(--muted);margin-top:4px">'+(cur.numero?'N° asignado.':'Se asigna solo al guardar (correlativo desde 2000).')+'</div></div>'
     +'<div class="field"><label>Fecha de creación</label><input id="og_fecha" type="date" value="'+esc(cur.fecha||hoy)+'"></div></div>'
     +'<div class="field"><label>Proveedor</label><select id="og_proveedor">'+provOpts+'</select></div>'
     +'<div class="field"><label>Objeto / descripción general</label><input id="og_objeto" type="text" value="'+esc(cur.objeto||'')+'"></div>'
@@ -2240,6 +2261,19 @@ function renderOGItems(){
   const modDL=MODULOS_OPC.map(m=>'<option value="'+esc(m)+'"></option>').join('');
   box.innerHTML='<table class="grid usub" style="font-size:11.5px"><thead><tr><th>Cód Art</th><th>Artículo</th><th>Clasificación</th><th>Módulo (hasta 5)</th><th>Cant</th><th>UM</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody>'
     +OG_ITEMS.map((it,i)=>{
+      if(it._locked){
+        const mds=(it.modulos||[]).map(m=>esc(String(m).split(' - ')[0])).join(', ');
+        return '<tr style="background:#f3f1e8">'
+        +'<td>'+esc(it.cod_art||'')+'</td>'
+        +'<td>'+esc(it.articulo||it.descripcion||'')+'</td>'
+        +'<td>'+esc(it.centro_costos||'')+'</td>'
+        +'<td style="font-size:10.5px">'+(mds||'—')+'</td>'
+        +'<td>'+esc(it.cant!=null?it.cant:'')+'</td>'
+        +'<td>'+esc(it.um||'')+'</td>'
+        +'<td>'+esc(it.precio_unit!=null?it.precio_unit:'')+'</td>'
+        +'<td id="ogit_'+i+'">'+fmtMoney(itemTotal(it))+'</td>'
+        +'<td><span title="Renglón certificado: no se puede editar ni eliminar" style="font-size:10px;color:var(--muted);font-weight:700">CERT.</span></td></tr>';
+      }
       const mods=(it.modulos||[]).map((m,j)=>'<span style="display:inline-flex;align-items:center;gap:3px;background:#eceae1;border-radius:6px;padding:1px 5px;margin:1px;font-size:10.5px">'+esc(String(m).split(' - ')[0])+' <span onclick="ogDelModulo('+i+','+j+')" style="cursor:pointer;font-weight:700">×</span></span>').join('');
       const modInput=(it.modulos||[]).length>=5?'<span style="font-size:10px;color:var(--muted)">máx 5</span>':'<input list="ogModDL" placeholder="+ módulo" onchange="ogAddModulo('+i+',this.value);this.value=\'\'" style="width:120px;'+inp+'">';
       return '<tr>'
@@ -2301,14 +2335,14 @@ function updateOGTotal(){
   el.innerHTML = OG_ITEMS.length ? 'Total OG: <strong>'+fmtMoney(OG_ITEMS.reduce((a,it)=>a+itemTotal(it),0))+'</strong>' : '';
 }
 function addOGItem(){ OG_ITEMS.push({cod_art:'',articulo:'',centro_costos:'',modulos:[],cant:1,um:'UNI',precio_unit:''}); renderOGItems(); }
-function delOGItem(i){ OG_ITEMS.splice(i,1); renderOGItems(); }
+function delOGItem(i){ if(OG_ITEMS[i]&&OG_ITEMS[i]._locked){ toast('Ese renglón ya está certificado: no se puede eliminar.'); return; } OG_ITEMS.splice(i,1); renderOGItems(); }
 window.addOGItem=addOGItem; window.delOGItem=delOGItem; window.updateOGTotal=updateOGTotal;
 async function saveOG(id){
   const items=OG_ITEMS.filter(it=>(it.cod_art||'').trim()||(it.articulo||'').trim()||it.precio_unit)
     .map(it=>({cod_art:it.cod_art||'',articulo:it.articulo||'',centro_costos:it.centro_costos||'',modulos:(it.modulos||[]).slice(0,5),cant:+it.cant||0,um:it.um||'UNI',precio_unit:+it.precio_unit||0,imp:it.imp||{}}));
   const vcod=document.getElementById('og_proveedor').value, vv=(typeof DIC!=='undefined'?DIC.proveedores:[]).find(x=>x.codigo===vcod);
   const gv=id=>document.getElementById(id).value;
-  const obj={ numero:gv('og_numero'), fecha:gv('og_fecha'),
+  const obj={ fecha:gv('og_fecha'),
     proveedor_cod:vcod, proveedor:vv?(vv.razon||vv.comercial):'',
     objeto:gv('og_objeto'),
     condicion:gv('og_condicion'), tipo_contratacion:gv('og_condicion'), moneda:gv('og_moneda'),
@@ -2318,17 +2352,35 @@ async function saveOG(id){
     desvio:gv('og_desvio'), desvio_txt:gv('og_desvio_txt'), alcance:gv('og_alcance'), observaciones:gv('og_obs'),
     items };
   obj.monto_total = items.length ? items.reduce((a,it)=>a+(it.cant*it.precio_unit),0) : (gv('og_monto')===''?null:+gv('og_monto'));
-  if(!obj.numero){ toast('Cargá el N° de OG'); return; }
-  if(DEMO_MODE){ if(id==null||id==='null'){ obj.id=Math.max(0,...mem.ogs.map(r=>+r.id||0))+1; mem.ogs.unshift(obj); } else { const r=ogById(id); if(r) Object.assign(r,obj); } }
-  else { if(id==null||id==='null') await sbFetch('/ogs',{method:'POST',body:JSON.stringify(obj)}); else await sbFetch('/ogs?id=eq.'+id,{method:'PATCH',body:JSON.stringify(obj)}); await reloadDB(); }
+  const isNew=(id==null||id==='null');
+  if(DEMO_MODE){
+    if(isNew){ obj.id=Math.max(0,...mem.ogs.map(r=>+r.id||0))+1; obj.numero=String(Math.max(1999,...(mem.ogs||[]).map(x=>+x.numero||0))+1); mem.ogs.unshift(obj); }
+    else { const r=ogById(id); if(r) Object.assign(r,obj); }   // no cambia el N°
+  } else {
+    if(isNew) await sbFetch('/ogs',{method:'POST',body:JSON.stringify(obj)});   // Supabase asigna el N° (correlativo)
+    else await sbFetch('/ogs?id=eq.'+id,{method:'PATCH',body:JSON.stringify(obj)});
+    await reloadDB();
+  }
   closeModal(); toast('Guardado'); renderCompras();
 }
 window.saveOG=saveOG;
-function askDelOG(id){
-  openModal('Eliminar OG','<p style="margin:0;font-size:14px;color:#5f5c52;line-height:1.5">Se elimina la OG y todos sus certificados. ¿Continuar?</p>',
-    '<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn danger" onclick="confirmDelOG('+id+')">Eliminar</button>');
+function askAnularOG(id){
+  const o=ogById(id);
+  if(pagosOf(id).length>0){ toast('No se puede anular: la OG tiene pagos. El tesorero debe eliminarlos primero.'); return; }
+  openModal('Anular OG '+esc(o.numero),
+    '<p style="margin:0;font-size:14px;color:#5f5c52;line-height:1.5">La OG <strong>no se borra</strong>: queda registrada como <strong>Anulada</strong> (se mantiene la numeración consecutiva). ¿Confirmás?</p>',
+    '<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn danger" onclick="confirmAnularOG('+id+')">Anular</button>');
 }
-window.askDelOG=askDelOG;
+window.askAnularOG=askAnularOG;
+async function confirmAnularOG(id){
+  if(pagosOf(id).length>0){ toast('La OG tiene pagos; no se puede anular.'); return; }
+  const who=(AUTH_USER&&AUTH_USER.email)||('demo:'+DEMO_ROLE);
+  const patch={ anulada:true, anulada_por:who, anulada_fecha:new Date().toISOString() };
+  if(DEMO_MODE){ const o=ogById(id); if(o) Object.assign(o,patch); }
+  else { await sbFetch('/ogs?id=eq.'+id,{method:'PATCH',body:JSON.stringify(patch)}); await reloadDB(); }
+  closeModal(); toast('OG anulada'); renderCompras();
+}
+window.confirmAnularOG=confirmAnularOG;
 async function confirmDelOG(id){
   if(DEMO_MODE){ mem.ogs=mem.ogs.filter(o=>String(o.id)!==String(id)); mem.certificados=mem.certificados.filter(c=>String(c.og_id)!==String(id)); }
   else { await sbFetch('/og_certificados?og_id=eq.'+id,{method:'DELETE',prefer:'return=minimal'}); await sbFetch('/ogs?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'}); await reloadDB(); }
@@ -2339,7 +2391,7 @@ window.confirmDelOG=confirmDelOG;
 /* ---- Certificados ---- */
 function openCert(ogId, id){
   const o=ogById(ogId); const c = id!=null ? certsOf(ogId).find(x=>String(x.id)===String(id)) : null; const cur=c||{};
-  const num = cur.numero || ('C'+(certsOf(ogId).length+(id!=null?0:1)));
+  const num = cur.numero || nextCertNum(o);
   const hoy=new Date().toISOString().slice(0,10);
   const hasItems = o && o.items && o.items.length;
   let avanceHtml;
@@ -2358,7 +2410,7 @@ function openCert(ogId, id){
     avanceHtml='<div class="field"><label>% de avance de este certificado</label><input id="ct_pct" type="number" step="0.01" value="'+esc(cur.pct!=null?cur.pct:'')+'">'
       +'<div style="font-size:11.5px;color:var(--muted);margin-top:4px">Disponible por certificar: '+rem.toFixed(1).replace('.0','')+'%'+(o&&o.monto_total?' · $ = % × '+fmtMoney(o.monto_total):'')+'</div></div>';
   }
-  const body='<div class="frow c2"><div class="field"><label>Certificado N°</label><input id="ct_num" type="text" value="'+esc(num)+'"></div>'
+  const body='<div class="frow c2"><div class="field"><label>Certificado N°</label><input id="ct_num" type="text" readonly value="'+esc(num)+'" style="background:#f3f1e8"><div style="font-size:11px;color:var(--muted);margin-top:4px">Automático: N° de OG + secuencia.</div></div>'
     +'<div class="field"><label>Fecha</label><input id="ct_fecha" type="date" value="'+esc(cur.fecha||hoy)+'"></div></div>'
     +avanceHtml
     +'<div class="frow c2"><div class="field"><label>Aprobación</label><select id="ct_aprob"><option'+(cur.aprobacion==='SI'?' selected':'')+'>SI</option><option'+(cur.aprobacion==='NO'||!cur.aprobacion?' selected':'')+'>NO</option></select></div>'
@@ -2371,11 +2423,15 @@ function openCert(ogId, id){
 }
 window.openCert=openCert;
 async function saveCert(ogId, id){
+  if(!canCert()){ toast('No tenés permiso para cargar/editar certificados.'); return; }
+  const editando=(id!=null&&id!=='null');
+  if(editando && pagosOf(ogId).length>0){ toast('La OG tiene pagos: no se puede editar el certificado. El tesorero debe eliminar el pago primero.'); return; }
   const o=ogById(ogId); const hasItems = o && o.items && o.items.length;
   const obj={ og_id:ogId, numero:document.getElementById('ct_num').value, fecha:document.getElementById('ct_fecha').value,
     aprobacion:document.getElementById('ct_aprob').value, estado:document.getElementById('ct_estado').value,
     pagado:document.getElementById('ct_pagado').value==='si', fecha_pago:document.getElementById('ct_fpago').value,
     observaciones:document.getElementById('ct_obs').value };
+  if(id==null||id==='null') obj.numero = nextCertNum(o);   // recalcula al guardar (evita colisiones)
   if(hasItems){ const av={}; o.items.forEach((it,idx)=>{ const el=document.getElementById('ctav_'+idx); if(el && el.value!=='') av[idx]=+el.value; }); obj.avances=av; obj.pct=null; }
   else { const pct=document.getElementById('ct_pct').value; obj.pct=(pct===''?0:+pct); }
   // Validación: el acumulado no puede superar el 100%
@@ -2400,11 +2456,14 @@ async function saveCert(ogId, id){
 }
 window.saveCert=saveCert;
 function delCert(id, ogId){
-  openModal('Eliminar certificado','<p style="margin:0;font-size:14px;color:#5f5c52;line-height:1.5">¿Eliminar este certificado?</p>',
+  if(!canCert()){ toast('No tenés permiso para eliminar certificados.'); return; }
+  if(pagosOf(ogId).length>0){ toast('La OG tiene pagos registrados. El tesorero debe eliminar el pago antes de tocar los certificados.'); return; }
+  openModal('Eliminar certificado','<p style="margin:0;font-size:14px;color:#5f5c52;line-height:1.5">¿Eliminar este certificado? (no queda registro)</p>',
     '<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn danger" onclick="confirmDelCert('+id+','+ogId+')">Eliminar</button>');
 }
 window.delCert=delCert;
 async function confirmDelCert(id, ogId){
+  if(pagosOf(ogId).length>0){ toast('La OG tiene pagos; no se puede eliminar el certificado.'); return; }
   if(DEMO_MODE){ mem.certificados=mem.certificados.filter(c=>String(c.id)!==String(id)); }
   else { await sbFetch('/og_certificados?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'}); await reloadDB(); }
   OG_EXPANDED.add(ogId);
