@@ -2229,7 +2229,7 @@ function openOG(id){
   const hoy=new Date().toISOString().slice(0,10);
   const body='<div class="frow c2"><div class="field"><label>N° OG</label><input id="og_numero" type="text" readonly value="'+esc(cur.numero || (DEMO_MODE?nextNum:''))+'" placeholder="Se asigna al guardar" style="background:#f3f1e8"><div style="font-size:11px;color:var(--muted);margin-top:4px">'+(cur.numero?'N° asignado.':'Se asigna solo al guardar (correlativo desde 2000).')+'</div></div>'
     +'<div class="field"><label>Fecha de creación</label><input id="og_fecha" type="date" value="'+esc(cur.fecha||hoy)+'"></div></div>'
-    +'<div class="field"><label>Proveedor</label><input id="og_proveedor" list="ogProvDL" value="'+esc(provVal)+'" placeholder="Escribí código o nombre…" autocomplete="off"><datalist id="ogProvDL">'+provDL+'</datalist><div style="font-size:11px;color:var(--muted);margin-top:4px">Escribí parte del código o del nombre y elegí de la lista.</div></div>'
+    +'<div class="field"><label>Proveedor</label><input id="og_proveedor" value="'+esc(provVal)+'" placeholder="Escribí código o nombre…" autocomplete="off" onfocus="comboProv()" oninput="comboProv()" onblur="comboHideDelayed()"><div style="font-size:11px;color:var(--muted);margin-top:4px">Escribí código o nombre y elegí de la lista.</div></div>'
     +'<div class="field"><label>Objeto / descripción general</label><input id="og_objeto" type="text" value="'+esc(cur.objeto||'')+'"></div>'
     +'<div class="frow c2"><div class="field"><label>Comprador (crea la OG)</label><select id="og_comprador">'+compOpts+'</select></div>'
     +'<div class="field"><label>Certifica la OG</label><select id="og_certificador">'+certOpts+'</select></div></div>'
@@ -2283,7 +2283,7 @@ function renderOGItems(){
       const mods=(it.modulos||[]).map((m,j)=>'<span style="display:inline-flex;align-items:center;gap:3px;background:#eceae1;border-radius:6px;padding:1px 5px;margin:1px;font-size:10.5px">'+esc(String(m).split(' - ')[0])+' <span onclick="ogDelModulo('+i+','+j+')" style="cursor:pointer;font-weight:700">×</span></span>').join('');
       const modInput=(it.modulos||[]).length>=5?'<span style="font-size:10px;color:var(--muted)">máx 5</span>':'<input list="ogModDL" placeholder="+ módulo" onchange="ogAddModulo('+i+',this.value);this.value=\'\'" style="width:120px;'+inp+'">';
       return '<tr>'
-      +'<td><input list="ogArtDL" value="'+esc(it.cod_art||'')+'" placeholder="código o nombre…" onchange="ogSetCod('+i+',this.value)" style="width:150px;'+inp+'"></td>'
+      +'<td><input id="ogart_'+i+'" value="'+esc(it.cod_art||'')+'" placeholder="código, nombre o sinónimo…" autocomplete="off" onfocus="comboArt('+i+')" oninput="comboArt('+i+')" onblur="comboHideDelayed()" style="width:150px;'+inp+'"></td>'
       +'<td><input type="text" value="'+esc(it.articulo||it.descripcion||'')+'" oninput="OG_ITEMS['+i+'].articulo=this.value" style="width:140px;'+inp+'"></td>'
       +'<td><input list="ogClasDL" value="'+esc(it.centro_costos ? (it.centro_costos+((clasifDesc(it.centro_costos)&&clasifDesc(it.centro_costos)!==it.centro_costos)?' — '+clasifDesc(it.centro_costos):'')) : '')+'" placeholder="código o nombre…" onchange="ogSetClasif('+i+',this.value)" style="width:150px;'+inp+'"></td>'
       +'<td style="min-width:150px">'+mods+' '+modInput+'</td>'
@@ -2339,6 +2339,56 @@ function ogSetCod(i, val){
             const artInput=tr.children[1]?.querySelector('input'); if(artInput) artInput.value=a.descripcion; } }
 }
 window.ogSetCod=ogSetCod;
+
+/* ===== Buscador propio (combobox) para proveedor y artículo ===== */
+let _comboEl=null;
+function _comboDD(){
+  if(!_comboEl){
+    _comboEl=document.createElement('div');
+    _comboEl.id='comboDD';
+    _comboEl.style.cssText='position:fixed;z-index:99999;display:none;background:#fff;border:1px solid var(--line-strong);border-radius:8px;max-height:240px;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,.20);font-size:13px';
+    document.body.appendChild(_comboEl);
+  }
+  return _comboEl;
+}
+function comboShow(inp, items, pick){
+  const dd=_comboDD(); const r=inp.getBoundingClientRect();
+  dd.style.left=r.left+'px'; dd.style.top=(r.bottom+2)+'px'; dd.style.minWidth=Math.max(r.width,240)+'px';
+  if(!items.length){ dd.innerHTML='<div style="padding:9px 11px;color:var(--muted)">Sin resultados</div>'; dd.style.display='block'; return; }
+  dd.innerHTML=items.map((it,k)=>'<div data-k="'+k+'" style="padding:8px 11px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap"><strong>'+esc(it.code)+'</strong> <span style="color:var(--muted)">— '+esc(it.name)+'</span></div>').join('');
+  dd.style.display='block';
+  [...dd.children].forEach((ch,k)=>{ ch.onmousedown=(e)=>{ e.preventDefault(); pick(items[k]); comboHide(); }; ch.onmouseover=()=>ch.style.background='#f3f1e8'; ch.onmouseout=()=>ch.style.background='#fff'; });
+}
+function comboHide(){ if(_comboEl) _comboEl.style.display='none'; }
+function comboHideDelayed(){ setTimeout(comboHide,150); }
+window.comboHideDelayed=comboHideDelayed;
+function comboProv(){
+  const inp=document.getElementById('og_proveedor'); if(!inp) return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const src=(typeof DIC!=='undefined'?DIC.proveedores:[])||[];
+  const items=(q?src.filter(p=>((p.codigo||'')+' '+(p.razon||'')+' '+(p.comercial||'')).toLowerCase().includes(q)):src).slice(0,80)
+    .map(p=>({code:p.codigo, name:(p.razon||p.comercial||'')}));
+  comboShow(inp, items, it=>{ inp.value=it.code+' — '+it.name; });
+}
+window.comboProv=comboProv;
+function comboArt(i){
+  const inp=document.getElementById('ogart_'+i); if(!inp) return;
+  const q=(inp.value||'').trim().toLowerCase();
+  const src=(typeof DIC!=='undefined'?DIC.articulos:[])||[];
+  const items=(q?src.filter(a=>((a.codigo||'')+' '+(a.descripcion||'')+' '+(a.sinonimo||'')+' '+(a.desc_adicional||'')).toLowerCase().includes(q)):src).slice(0,80)
+    .map(a=>({code:a.codigo, name:(a.descripcion||'')+(a.sinonimo?' · '+a.sinonimo:'')}));
+  comboShow(inp, items, it=>{ ogSetCodDirect(i, it.code); });
+}
+window.comboArt=comboArt;
+function ogSetCodDirect(i, code){
+  OG_ITEMS[i].cod_art=code;
+  const a=(typeof DIC!=='undefined'?DIC.articulos:[]).find(x=>x.codigo===code);
+  if(a) OG_ITEMS[i].articulo=a.descripcion;
+  const inp=document.getElementById('ogart_'+i); if(inp) inp.value=code;
+  const box=document.getElementById('ogItemsBox'); const tr=box&&box.querySelectorAll('tbody tr')[i];
+  if(tr && a){ const artInput=tr.children[1]?.querySelector('input'); if(artInput) artInput.value=a.descripcion; }
+}
+window.ogSetCodDirect=ogSetCodDirect;
 function ogSetClasif(i, val){
   val=(val||'').trim();
   const code=val.split(' — ')[0].trim();
