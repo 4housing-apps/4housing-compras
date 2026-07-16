@@ -1663,6 +1663,15 @@ function nextCertNum(o){
   return (o.numero||'OG')+'-'+(maxN+1);
 }
 function itemTotal(it){ return (+it.cant||0)*(+it.precio_unit||0); }
+// Prefijo de moneda según el select de la OG en edición: Corriente=$, Extranjera=USD
+function ogMonedaSym(){ const el=document.getElementById('og_moneda'); return (el && el.value==='Extranjera') ? 'USD ' : '$'; }
+// Importe formateado es-AR con 3 decimales y prefijo de moneda (para totales de renglón y total OG)
+function fmtImporte(v){ return ogMonedaSym()+(+v||0).toLocaleString('es-AR',{minimumFractionDigits:3,maximumFractionDigits:3}); }
+// Parseo tolerante: acepta "1.000.000,50" (AR) o "1000000.5" (plano). Devuelve número o null.
+function parseNum(s){ s=String(s==null?'':s).trim(); if(s==='') return null; if(s.indexOf(',')>=0) s=s.replace(/\./g,'').replace(',','.'); const n=parseFloat(s); return isNaN(n)?null:n; }
+// Formato es-AR con cantidad fija de decimales; '' si viene vacío.
+function fmtNum(v,dec){ return (v==null||v==='')?'':(+v||0).toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+window.parseNum=parseNum; window.fmtNum=fmtNum;
 function ogTotal(og){ return (og.items&&og.items.length) ? og.items.reduce((a,it)=>a+itemTotal(it),0) : (+og.monto_total||0); }
 function certMonto(c, og){
   if(og.items&&og.items.length){ const av=c.avances||{}; return og.items.reduce((a,it,idx)=>a+itemTotal(it)*((+av[idx]||0)/100),0); }
@@ -2309,7 +2318,7 @@ function renderOGItems(){
   const artDL=artList.map(a=>{ let v=a.codigo+' — '+a.descripcion; if(a.sinonimo) v+=' — '+a.sinonimo; if(a.desc_adicional) v+=' — '+a.desc_adicional; return '<option value="'+esc(v)+'"></option>'; }).join('');
   const clasDL=CLASIF_RENGLON.map(c=>'<option value="'+esc(c.codigo+' — '+c.desc)+'"></option>').join('');
   const modDL=MODULOS_OPC.map(m=>'<option value="'+esc(m)+'"></option>').join('');
-  box.innerHTML='<table class="grid usub og-items-tbl" style="font-size:11.5px;table-layout:fixed;width:100%"><colgroup><col style="width:120px"><col style="width:22%"><col style="width:20%"><col style="width:220px"><col style="width:52px"><col style="width:64px"><col style="width:96px"><col style="width:96px"><col style="width:42px"></colgroup><thead><tr><th>Cód Art</th><th>Artículo</th><th>Clasificación</th><th>Módulo (hasta 5)</th><th>Cant</th><th>UM</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody>'
+  box.innerHTML='<table class="grid usub og-items-tbl" style="font-size:11.5px;table-layout:fixed;width:100%"><colgroup><col style="width:110px"><col style="width:19%"><col style="width:17%"><col style="width:150px"><col style="width:92px"><col style="width:52px"><col style="width:140px"><col style="width:140px"><col style="width:40px"></colgroup><thead><tr><th>Cód Art</th><th>Artículo</th><th>Clasificación</th><th>Módulo (hasta 5)</th><th>Cant</th><th>UM</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody>'
     +OG_ITEMS.map((it,i)=>{
       if(it._locked){
         const mds=(it.modulos||[]).map(m=>esc(String(m).split(' - ')[0])).join(', ');
@@ -2318,10 +2327,10 @@ function renderOGItems(){
         +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.articulo||it.descripcion||'')+'</td>'
         +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.centro_costos||'')+'</td>'
         +'<td style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis">'+(mds||'—')+'</td>'
-        +'<td>'+esc(it.cant!=null?it.cant:'')+'</td>'
+        +'<td style="text-align:right">'+fmtNum(it.cant,2)+'</td>'
         +'<td>'+esc(it.um||'')+'</td>'
-        +'<td>'+esc(it.precio_unit!=null?it.precio_unit:'')+'</td>'
-        +'<td id="ogit_'+i+'">'+fmtMoney(itemTotal(it))+'</td>'
+        +'<td style="text-align:right">'+fmtNum(it.precio_unit,3)+'</td>'
+        +'<td id="ogit_'+i+'">'+fmtImporte(itemTotal(it))+'</td>'
         +'<td><span title="Renglón certificado: no se puede editar ni eliminar" style="font-size:10px;color:var(--muted);font-weight:700">CERT.</span></td></tr>';
       }
       const mods=(it.modulos||[]).map((m,j)=>'<span style="display:inline-flex;align-items:center;gap:3px;background:#eceae1;border-radius:6px;padding:1px 5px;margin:1px;font-size:10.5px">'+esc(String(m).split(' - ')[0])+' <span onclick="ogDelModulo('+i+','+j+')" style="cursor:pointer;font-weight:700">×</span></span>').join('');
@@ -2331,10 +2340,10 @@ function renderOGItems(){
       +'<td><input type="text" value="'+esc(it.articulo||it.descripcion||'')+'" oninput="OG_ITEMS['+i+'].articulo=this.value" style="width:100%;'+inp+'"></td>'
       +'<td><input id="ogclas_'+i+'" value="'+esc(it.centro_costos ? (it.centro_costos+((clasifDesc(it.centro_costos)&&clasifDesc(it.centro_costos)!==it.centro_costos)?' — '+clasifDesc(it.centro_costos):'')) : '')+'" placeholder="código o nombre…" autocomplete="off" onfocus="comboClasRen('+i+')" oninput="comboClasRen('+i+')" onblur="comboHideDelayed()" style="width:100%;'+inp+'"></td>'
       +'<td>'+mods+' '+modInput+'</td>'
-      +'<td><input type="number" value="'+esc(it.cant!=null?it.cant:'')+'" oninput="OG_ITEMS['+i+'].cant=this.value;updateOGTotal()" style="width:100%;'+inp+'"></td>'
+      +'<td><input type="text" inputmode="decimal" value="'+fmtNum(it.cant,2)+'" onfocus="this.value=(OG_ITEMS['+i+'].cant!=null?String(OG_ITEMS['+i+'].cant):\'\')" oninput="OG_ITEMS['+i+'].cant=parseNum(this.value);updateOGTotal()" onblur="this.value=fmtNum(OG_ITEMS['+i+'].cant,2)" style="width:100%;text-align:right;'+inp+'"></td>'
       +'<td><select onchange="OG_ITEMS['+i+'].um=this.value" style="width:100%;'+inp+'">'+UM_LIST.map(u=>'<option'+(u===it.um?' selected':'')+'>'+u+'</option>').join('')+'</select></td>'
-      +'<td><input type="number" value="'+esc(it.precio_unit!=null?it.precio_unit:'')+'" oninput="OG_ITEMS['+i+'].precio_unit=this.value;updateOGTotal()" style="width:100%;'+inp+'"></td>'
-      +'<td id="ogit_'+i+'" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fmtMoney(itemTotal(it))+'</td>'
+      +'<td><input type="text" inputmode="decimal" value="'+fmtNum(it.precio_unit,3)+'" onfocus="this.value=(OG_ITEMS['+i+'].precio_unit!=null?String(OG_ITEMS['+i+'].precio_unit):\'\')" oninput="OG_ITEMS['+i+'].precio_unit=parseNum(this.value);updateOGTotal()" onblur="this.value=fmtNum(OG_ITEMS['+i+'].precio_unit,3)" style="width:100%;text-align:right;'+inp+'"></td>'
+      +'<td id="ogit_'+i+'" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fmtImporte(itemTotal(it))+'</td>'
       +'<td><button class="iconbtn del" onclick="delOGItem('+i+')">'+ICO.del+'</button></td></tr>'; }).join('')
     +'</tbody></table><datalist id="ogArtDL">'+artDL+'</datalist><datalist id="ogClasDL">'+clasDL+'</datalist><datalist id="ogModDL">'+modDL+'</datalist>';
   updateOGTotal();
@@ -2485,9 +2494,9 @@ function resolveProv(val){
 }
 window.resolveProv=resolveProv;
 function updateOGTotal(){
-  OG_ITEMS.forEach((it,i)=>{ const c=document.getElementById('ogit_'+i); if(c) c.textContent=fmtMoney(itemTotal(it)); });
+  OG_ITEMS.forEach((it,i)=>{ const c=document.getElementById('ogit_'+i); if(c) c.textContent=fmtImporte(itemTotal(it)); });
   const el=document.getElementById('ogTotalLine'); if(!el) return;
-  el.innerHTML = OG_ITEMS.length ? 'Total OG: <strong>'+fmtMoney(OG_ITEMS.reduce((a,it)=>a+itemTotal(it),0))+'</strong>' : '';
+  el.innerHTML = OG_ITEMS.length ? 'Total OG: <strong>'+fmtImporte(OG_ITEMS.reduce((a,it)=>a+itemTotal(it),0))+'</strong>' : '';
 }
 function addOGItem(){
   const cinp=document.getElementById('og_clasif');
