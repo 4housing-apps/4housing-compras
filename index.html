@@ -2769,7 +2769,7 @@ function paintDic(){
       .sort((a,b)=>(parseInt(a.cod,10)||9999)-(parseInt(b.cod,10)||9999));
     html='<div style="font-size:12px;color:var(--muted);margin:2px 0 12px">Cada auxiliar de Tango con todas sus opciones. Tocá para desplegar y usá el buscador de cada uno.'+(verConf?' Podés marcar un auxiliar como confidencial (solo lo ven usuarios habilitados).':'')+'</div>'
       +tipos.map(t=>{
-        const opts=(CONTA_DB.auxopc&&CONTA_DB.auxopc[t.cod])||[];
+        const opts=auxOpts(t.cod);
         const open=(AUX_OPEN===t.cod);
         return '<div class="card" style="margin-bottom:10px">'
           +'<div class="card-h" style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;font-size:15px;cursor:pointer" onclick="setAuxOpen(\''+esc(t.cod)+'\')">'+esc(t.cod)+' · '+esc(t.desc)+(t.confidencial?' <span class="badge b-ambar">confid.</span>':'')+'</h3><span class="meta">'+opts.length+' opciones</span>'
@@ -2784,6 +2784,7 @@ function paintDic(){
 }
 function setDicTipo(t){ DIC_STIPO=t; paintDic(); }
 window.setDicTipo=setDicTipo;
+function auxOpts(code){ return ((CONTA_DB.auxopc&&CONTA_DB.auxopc[code])||[]).slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true})); }
 function auxRows(list){
   if(!list||!list.length) return '<div style="padding:8px;color:var(--muted);font-size:12.5px">Sin opciones</div>';
   return list.slice(0,400).map(o=>'<div style="display:flex;gap:12px;padding:6px 9px;border-bottom:1px solid var(--line);font-size:12.5px"><span style="min-width:120px;font-weight:600">'+esc(o.cod)+'</span><span>'+esc(o.desc)+'</span></div>').join('')
@@ -2795,7 +2796,7 @@ function auxFilter(code){
   const inp=document.getElementById('auxq_'+code), box=document.getElementById('auxlist_'+code);
   if(!inp||!box) return;
   const q=(inp.value||'').trim().toLowerCase();
-  const opts=(CONTA_DB.auxopc&&CONTA_DB.auxopc[code])||[];
+  const opts=auxOpts(code);
   const f=q?opts.filter(o=>((o.cod||'')+' '+(o.desc||'')).toLowerCase().includes(q)):opts;
   box.innerHTML=auxRows(f);
 }
