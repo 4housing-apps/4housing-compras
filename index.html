@@ -64,6 +64,9 @@ a{color:var(--olive-deep);}
 .kpi-value{font-size:30px;font-weight:700;line-height:1;margin:8px 0 6px;}
 .kpi-sub{font-size:11.5px;color:var(--muted);line-height:1.35;}
 .kpi .ok{color:#4f8a53;} .kpi .bad{color:#b0584f;}
+.kpi.clickable{cursor:pointer;transition:box-shadow .15s,border-color .15s;}
+.kpi.clickable:hover{border-color:var(--olive);box-shadow:0 0 0 2px rgba(157,185,139,.3);}
+.kpi.clickable.active{border-color:var(--olive-deep);box-shadow:0 0 0 2px var(--olive-deep) inset;background:var(--cream);}
 
 /* ===== CARD + TABLA ===== */
 .card{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;}
@@ -1736,22 +1739,28 @@ async function renderCompras(){
   if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
   if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
   if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
+  else if(OG_FILTRO.estado==='certificadas') ogs=ogs.filter(o=>ogAcumPct(o.id)>=99.999);
   else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
   else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
 
   let comprometido=0, certificado=0, liberado=0, pagado=0;
   ogs.forEach(o=>{ comprometido+=ogTotal(o); certificado+=ogAcumMonto(o); liberado+=ogLiberado(o); pagado+=ogPagado(o); });
   const aPagar=liberado-pagado;
-  const K=(l,v,s,t)=>'<div class="kpi"><div class="kpi-label">'+l+'</div><div class="kpi-value '+(t||'')+'">'+v+'</div><div class="kpi-sub">'+esc(s||'')+'</div></div>';
-  const kpis=K('Comprometido', fmtMoney(comprometido),'Suma de OGs')
-    +K('Certificado', fmtMoney(certificado),'Avance acumulado')
-    +K('Liberado a pagar', fmtMoney(aPagar),'Aprobado y sin pagar', aPagar>0?'bad':'ok')
-    +K('Pagado', fmtMoney(pagado),'Ya abonado por tesorería','ok');
+  const K=(l,v,s,t,filtroVal)=>{
+    const activa = filtroVal!==undefined && OG_FILTRO.estado===filtroVal;
+    const cls='kpi'+(filtroVal!==undefined?' clickable':'')+(activa?' active':'');
+    const click=filtroVal!==undefined?' onclick="setOGFiltro(\'estado\',\''+(activa?'todas':filtroVal)+'\')" title="Click para filtrar la tabla por este estado"':'';
+    return '<div class="'+cls+'"'+click+'><div class="kpi-label">'+l+'</div><div class="kpi-value '+(t||'')+'">'+v+'</div><div class="kpi-sub">'+esc(s||'')+'</div></div>';
+  };
+  const kpis=K('Comprometido', fmtMoney(comprometido),'Suma de OGs',null,'todas')
+    +K('Certificado', fmtMoney(certificado),'Avance acumulado',null,'certificadas')
+    +K('Liberado a pagar', fmtMoney(aPagar),'Aprobado y sin pagar', aPagar>0?'bad':'ok','a_pagar')
+    +K('Pagado', fmtMoney(pagado),'Ya abonado por tesorería','ok','pagadas');
 
   // barra de filtros
   const compradores=[...new Set(ogsAll.map(o=>o.comprador).filter(Boolean))].sort();
   const certifs=[...new Set(ogsAll.map(o=>o.certificador).filter(Boolean))].sort();
-  const selEstado=[['todas','Todas'],['por_certificar','Por certificar'],['a_pagar','Liberadas a pagar (tesorería)'],['pagadas','Pagadas']]
+  const selEstado=[['todas','Todas'],['por_certificar','Por certificar'],['certificadas','Certificadas'],['a_pagar','Liberadas a pagar (tesorería)'],['pagadas','Pagadas']]
     .map(x=>'<option value="'+x[0]+'"'+(OG_FILTRO.estado===x[0]?' selected':'')+'>'+x[1]+'</option>').join('');
   const selComp='<option value="">Comprador: todos</option>'+compradores.map(n=>'<option'+(OG_FILTRO.comprador===n?' selected':'')+'>'+esc(n)+'</option>').join('');
   const selCert='<option value="">Certifica: todos</option>'+certifs.map(n=>'<option'+(OG_FILTRO.certificador===n?' selected':'')+'>'+esc(n)+'</option>').join('');
@@ -1957,6 +1966,7 @@ function ogsFiltradas(){
   if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
   if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
   if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
+  else if(OG_FILTRO.estado==='certificadas') ogs=ogs.filter(o=>ogAcumPct(o.id)>=99.999);
   else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
   else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
   return ogs;
@@ -2166,6 +2176,7 @@ function exportOGExcel(){
   if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
   if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
   if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
+  else if(OG_FILTRO.estado==='certificadas') ogs=ogs.filter(o=>ogAcumPct(o.id)>=99.999);
   else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
   else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
   const rows=ogReportRows(ogs);
