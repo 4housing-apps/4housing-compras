@@ -1897,18 +1897,26 @@ const REPORT_COLS=['Talonario oc','Fecha de emisión','Cód. clasificación (Ren
   'Cantidad Recibida','Cantidad Facturada','Total','Estado (renglón)','Observaciones','Moneda','Cotización',
   'Nombre del comprador','Condición de compra','SOLP_N° (Adic.)','CERTIFICADOR (Adic.)','COSTEO (Adic.)','ESTRUCTURA (Adic.)',
   'COMPRA_URGENTE (Adic.)','POSTVENTA (Adic.)','DESVIO_ (Adic.)','Desvio (Adic.)','RUBRO (Adic.)','SUBRUBRO (Adic.)','ALCANCE (Adic.)',
-  'MODULO 1 (Adic.)','MODULO 2 (Adic.)','MODULO 3 (Adic.)','MODULO 4 (Adic.)','MODULO 5 (Adic.)'];
+  'MODULO 1 (Adic.)','MODULO 2 (Adic.)','MODULO 3 (Adic.)','MODULO 4 (Adic.)','MODULO 5 (Adic.)',
+  'Equiv. en pesos (compra)','Pesos pagados'];
 
 function renglonPagadoPct(o, idx){
-  return certsOf(o.id).filter(c=>c.pagado).reduce((a,c)=>{
-    if(o.items&&o.items.length) return a+(+((c.avances||{})[idx])||0);
-    return a+(+c.pct||0);
-  },0);
+  // El pago es a nivel OG (por %), aplica igual a todos los renglones. Fuente real: Tesorería.
+  return ogPagadoPct(o);
+}
+// Pesos realmente pagados de una OG (suma de cada pago llevado a pesos por su propio TC)
+function ogPesosPagados(o){
+  return pagosOf(o.id).reduce((a,p)=>{ const imp=+p.importe_pago||0; return a+(p.moneda_pago==='USD'?imp*(+p.tc||0):imp); },0);
 }
 
 function ogReportRows(ogs){
   const rows=[REPORT_COLS.slice()];
   ogs.forEach(o=>{
+    const esUSD = (o.moneda==='Extranjera');
+    const tcCompra = (o.tc_pesos!=null && o.tc_pesos!=='') ? +o.tc_pesos : (USD_VENTA?+USD_VENTA:null); // OG viejas: cotización actual
+    const ppOG = ogPesosPagados(o);   // pesos realmente pagados (todos los pagos)
+    const ogTot = ogTotal(o) || 0;    // total en moneda de la OG
+    const round2 = x => Math.round((+x||0)*100)/100;
     const items=(o.items&&o.items.length)?o.items:[null]; // null = OG sin renglones
     items.forEach((it,idx)=>{
       const esOG = it===null;
@@ -1956,6 +1964,10 @@ function ogReportRows(ogs){
       r[32]= o.alcance||'';                            // ALCANCE
       const mods = esOG ? [] : (it.modulos||[]);
       r[33]= mods[0]||''; r[34]= mods[1]||''; r[35]= mods[2]||''; r[36]= mods[3]||''; r[37]= mods[4]||'';  // MODULO 1-5
+      // Equivalente en pesos de compra: USD → total×TC ; pesos → total tal cual
+      r[38]= esUSD ? (tcCompra!=null?round2(total*tcCompra):'') : round2(total);
+      // Pesos pagados (foto del momento): reparto proporcional del total pagado en pesos según el peso de la fila
+      r[39]= round2( ogTot ? ppOG*(total/ogTot) : (esOG?ppOG:0) );
       rows.push(r);
     });
   });
