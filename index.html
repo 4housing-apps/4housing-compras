@@ -2067,25 +2067,35 @@ function renderTesoreria(){
 function setTesTab(t){ TES_TAB=t; renderTesoreria(); }
 window.setTesTab=setTesTab; window.renderTesoreria=renderTesoreria;
 
-/* ---- Vista Órdenes de pago (agrupa pagos por N° de OP) ---- */
+/* ---- Vista Órdenes de pago (una fila por renglón: OG que compone la OP) ---- */
 function opsView(){
   const pagos=(mem.pagos||[]).slice();
   if(!pagos.length) return '<div class="card"><div class="empty">Todavía no se registraron pagos / órdenes de pago.</div></div>';
-  const byOp={};
-  pagos.forEach(p=>{ const k=(p.op_numero!=null&&p.op_numero!=='')?String(p.op_numero):('s/n·'+p.id); (byOp[k]=byOp[k]||[]).push(p); });
-  const keys=Object.keys(byOp).sort((a,b)=>(parseInt(a,10)||1e9)-(parseInt(b,10)||1e9));
-  const rows=keys.map(k=>{
-    const ps=byOp[k];
-    const mon=ps[0].moneda_pago; const simb=mon==='USD'?'US$ ':'$ ';
-    const total=ps.reduce((a,p)=>a+(+p.importe_pago||0),0);
-    const ogsTxt=[...new Set(ps.map(p=>'OG '+(p.numero||'—')))].join(', ');
+  // ordenar por N° de OP y, dentro, por OG
+  pagos.sort((a,b)=>((+a.op_numero||1e9)-(+b.op_numero||1e9)) || (String(a.numero||'').localeCompare(String(b.numero||''))));
+  let totARS=0, totUSD=0;
+  const rows=pagos.map(p=>{
+    const o=ogById(p.og_id)||{};
+    const mon=p.moneda_pago; const simb=mon==='USD'?'US$ ':'$ ';
+    const imp=+p.importe_pago||0; if(mon==='USD') totUSD+=imp; else totARS+=imp;
     const caja=CAJAS[mon]?CAJAS[mon].nombre:mon;
-    return '<tr><td><strong>OP '+esc(k)+'</strong></td><td>'+fmtDate(ps[0].fecha)+'</td>'
-      +'<td style="font-size:11px">'+esc(ogsTxt)+'</td><td>'+esc(ps[0].medio||'')+'</td><td style="font-size:11px">'+esc(caja)+'</td>'
-      +'<td style="text-align:right"><strong>'+simb+(total).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></td></tr>';
+    return '<tr><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
+      +'<td>'+fmtDate(p.fecha)+'</td>'
+      +'<td>OG '+esc(p.numero||'—')+'</td>'
+      +'<td style="font-size:11px">'+esc(o.proveedor_cod||'')+'</td>'
+      +'<td>'+esc(o.clasif_og||'')+'</td>'
+      +'<td>'+esc(o.solp!=null&&o.solp!==''?o.solp:'—')+'</td>'
+      +'<td style="font-size:11px">'+esc(o.comprador||'')+'</td>'
+      +'<td>'+esc(p.medio||'')+'</td>'
+      +'<td style="font-size:11px">'+esc(caja)+'</td>'
+      +'<td style="text-align:right"><strong>'+simb+imp.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})+'</strong></td></tr>';
   }).join('');
-  return '<div class="card"><div class="card-h"><h3>Órdenes de pago</h3><span class="meta">Una OP por cada pago. El asiento se generará por OP (próximo paso).</span></div>'
-    +'<table class="grid"><thead><tr><th>OP N°</th><th>Fecha</th><th>OG(s)</th><th>Medio</th><th>Caja</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  const totCell = (totARS?'$ '+totARS.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}):'')
+    + (totARS&&totUSD?' · ':'')
+    + (totUSD?'US$ '+totUSD.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}):'');
+  const foot='<tr style="border-top:2px solid var(--line-strong);font-weight:700"><td colspan="9" style="text-align:right">Total mostrado</td><td style="text-align:right">'+(totCell||'—')+'</td></tr>';
+  return '<div class="card"><div class="card-h"><h3>Órdenes de pago</h3><span class="meta">Una fila por OG pagada. Cuando una OP agrupe varias OG, el N° de OP se repite. El asiento se generará por OP (próximo paso).</span></div>'
+    +'<table class="grid" style="font-size:12.5px"><thead><tr><th>OP N°</th><th>Fecha</th><th>OG</th><th>Prov.</th><th>Clasif.</th><th>SOLP</th><th>Comprador</th><th>Medio</th><th>Caja</th><th style="text-align:right">Total</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
 }
 
 function colaView(cola){
