@@ -2270,19 +2270,24 @@ window.pgCalc=pgCalc;
 async function savePago(ogId){
   if(!canPago()){ toast('Solo el tesorero puede registrar pagos.'); return; }
   const o=ogById(ogId); const monOG=ogMonedaCode(o);
-  const pct=+document.getElementById('pg_pct').value||0;
+  let pct=+document.getElementById('pg_pct').value||0;
   const pend=ogPendPagoPct(o);
   if(pct<=0){ toast('Ingresá un % mayor a 0'); return; }
-  if(pct>pend+0.01){ toast('El % supera lo pendiente ('+pend.toFixed(0)+'%)'); return; }
+  if(pct>pend+0.5){ toast('El % supera lo pendiente ('+Math.round(pend)+'%)'); return; }
+  if(pct>pend) pct=pend;   // cargó el pendiente redondeado; ajusto al exacto para no pasarme
   const monPago=document.getElementById('pg_moneda').value;
   const tc=+document.getElementById('pg_tc').value||0;
   if((monOG==='USD'||monPago==='USD') && !tc){ toast('Cargá el tipo de cambio'); return; }
+  // importe consistente con el % ya ajustado
+  const montoOG=ogTotal(o)*pct/100;
+  let importe=montoOG;
+  if(monOG!==monPago){ if(monOG==='USD'&&monPago==='ARS') importe=montoOG*tc; else if(monOG==='ARS'&&monPago==='USD') importe = tc? montoOG/tc : 0; }
   const pago={ og_id:o.id, numero:o.numero,
     fecha:document.getElementById('pg_fecha').value, pct,
     moneda_og:monOG, moneda_pago:monPago, tc:(tc||null),
     medio:document.getElementById('pg_medio').value, caja_cod:CAJAS[monPago].cod,
     sin_caja: COND_SIN_CAJA.includes(o.condicion),
-    importe_pago:window._pgImporte||0, observaciones:document.getElementById('pg_obs').value };
+    importe_pago:importe, observaciones:document.getElementById('pg_obs').value };
   try{
     if(DEMO_MODE){ pago.id=Math.max(0,...(mem.pagos||[]).map(p=>+p.id||0))+1; pago.op_numero=Math.max(0,...(mem.pagos||[]).map(p=>+p.op_numero||0))+1; mem.pagos=mem.pagos||[]; mem.pagos.push(pago); }
     else { pago.registrado_por=(AUTH_USER&&AUTH_USER.email)||''; await sbFetch('/pagos',{method:'POST',body:JSON.stringify(pago)}); await reloadDB(); }
