@@ -2288,6 +2288,7 @@ function openOG(id){
     +'<div class="field"><label>Certifica la OG</label><select id="og_certificador">'+certOpts+'</select></div></div>'
     +'<div class="frow c2"><div class="field"><label>Condición de compra</label><select id="og_condicion" onchange="ogCondChanged()">'+condOpts+'</select></div>'
     +'<div class="field"><label>Moneda</label><select id="og_moneda">'+monOpts+'</select></div></div>'
+    +'<div class="field"><label>Tipo de cambio (pesos por USD)</label><input id="og_tc" type="number" step="0.01" value="'+esc(cur.tc_pesos!=null?cur.tc_pesos:(USD_VENTA||''))+'"><div style="font-size:11px;color:var(--muted);margin-top:4px">'+(USD_VENTA?('Dólar blue venta '+fmtNum(USD_VENTA,2)+(USD_FECHA?(' · '+USD_FECHA):'')+' (dolarapi), editable.'):'No se pudo traer la cotización automática; cargala a mano.')+' Sirve para ver el equivalente en pesos o dólares.</div></div>'
     +'<div id="ogAnticipoBox" style="display:'+(antShow?'block':'none')+'"><div class="frow c2"><div class="field"><label>% de anticipo</label><input id="og_antpct" type="number" min="0" max="100" value="'+esc(cur.anticipo_pct!=null?cur.anticipo_pct:'')+'"></div>'
     +'<div class="field"><label>Método de anticipo</label><select id="og_antmet">'+metOpts+'</select></div></div></div>'
     +'<div class="field"><label>Observaciones</label><textarea id="og_obs" rows="2" style="font-size:13px;min-height:36px;line-height:1.4" placeholder="Detalle de la condición (plazos, % de anticipo, aclaraciones)…">'+esc(cur.observaciones||'')+'</textarea></div>'
@@ -2517,6 +2518,7 @@ async function saveOG(id){
     proveedor_cod: vv?vv.codigo:'', proveedor: vv?(vv.razon||vv.comercial):(document.getElementById('og_proveedor').value||''),
     clasif_og:(document.getElementById('og_clasif').value||'').split(' — ')[0].trim(),
     condicion:gv('og_condicion'), tipo_contratacion:gv('og_condicion'), moneda:gv('og_moneda'),
+    tc_pesos:(gv('og_tc')===''?null:+gv('og_tc')),
     anticipo_pct:(gv('og_condicion')==='CON ANTICIPO' && document.getElementById('og_antpct') && document.getElementById('og_antpct').value!=='')?+document.getElementById('og_antpct').value:null,
     anticipo_metodo:(gv('og_condicion')==='CON ANTICIPO' && document.getElementById('og_antmet'))?document.getElementById('og_antmet').value:null,
     comprador:gv('og_comprador'), certificador:gv('og_certificador'),
