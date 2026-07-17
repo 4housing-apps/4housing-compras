@@ -2378,17 +2378,19 @@ function renderOGItems(){
   const artDL=artList.map(a=>{ let v=a.codigo+' — '+a.descripcion; if(a.sinonimo) v+=' — '+a.sinonimo; if(a.desc_adicional) v+=' — '+a.desc_adicional; return '<option value="'+esc(v)+'"></option>'; }).join('');
   const clasDL=CLASIF_RENGLON.map(c=>'<option value="'+esc(c.codigo+' — '+c.desc)+'"></option>').join('');
   const modDL=MODULOS_OPC.map(m=>'<option value="'+esc(m)+'"></option>').join('');
-  box.innerHTML='<table class="grid usub og-items-tbl" style="font-size:11.5px;table-layout:fixed;width:100%"><colgroup><col style="width:110px"><col style="width:19%"><col style="width:17%"><col style="width:150px"><col style="width:92px"><col style="width:52px"><col style="width:140px"><col style="width:140px"><col style="width:40px"></colgroup><thead><tr><th>Cód Art</th><th>Artículo</th><th>Clasificación</th><th>Módulo (hasta 5)</th><th>Cant</th><th>UM</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody>'
+  box.innerHTML='<table class="grid usub og-items-tbl" style="font-size:11.5px;table-layout:fixed;width:100%"><colgroup><col style="width:100px"><col style="width:15%"><col style="width:15%"><col style="width:13%"><col style="width:130px"><col style="width:82px"><col style="width:50px"><col style="width:58px"><col style="width:120px"><col style="width:120px"><col style="width:36px"></colgroup><thead><tr><th>Cód Art</th><th>Artículo</th><th>Hito</th><th>Clasificación</th><th>Módulo (hasta 5)</th><th>Cant</th><th>UM</th><th>Cert.</th><th>P. unit.</th><th>Total</th><th></th></tr></thead><tbody>'
     +OG_ITEMS.map((it,i)=>{
       if(it._locked){
         const mds=(it.modulos||[]).map(m=>esc(String(m).split(' - ')[0])).join(', ');
         return '<tr style="background:#f3f1e8">'
         +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.cod_art||'')+'</td>'
         +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.articulo||it.descripcion||'')+'</td>'
+        +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.hito||'')+'</td>'
         +'<td style="overflow:hidden;text-overflow:ellipsis">'+esc(it.centro_costos||'')+'</td>'
         +'<td style="font-size:10.5px;overflow:hidden;text-overflow:ellipsis">'+(mds||'—')+'</td>'
         +'<td style="text-align:right">'+fmtNum(it.cant,2)+'</td>'
         +'<td>'+esc(it.um||'')+'</td>'
+        +'<td style="font-size:10px;color:var(--muted)">'+(it.cert_modo==='unid'?'Unid':'%')+'</td>'
         +'<td style="text-align:right">'+fmtNum(it.precio_unit,3)+'</td>'
         +'<td id="ogit_'+i+'">'+fmtImporte(itemTotal(it))+'</td>'
         +'<td><span title="Renglón certificado: no se puede editar ni eliminar" style="font-size:10px;color:var(--muted);font-weight:700">CERT.</span></td></tr>';
@@ -2398,10 +2400,12 @@ function renderOGItems(){
       return '<tr>'
       +'<td><input id="ogart_'+i+'" value="'+esc(it.cod_art||'')+'" placeholder="código o nombre…" autocomplete="off" onfocus="comboArt('+i+')" oninput="comboArt('+i+')" onblur="comboHideDelayed()" style="width:100%;'+inp+'"></td>'
       +'<td><input type="text" value="'+esc(it.articulo||it.descripcion||'')+'" oninput="OG_ITEMS['+i+'].articulo=this.value" style="width:100%;'+inp+'"></td>'
+      +'<td><input type="text" value="'+esc(it.hito||'')+'" placeholder="alcance / tarea…" oninput="OG_ITEMS['+i+'].hito=this.value" style="width:100%;'+inp+'"></td>'
       +'<td><input id="ogclas_'+i+'" value="'+esc(it.centro_costos ? (it.centro_costos+((clasifDesc(it.centro_costos)&&clasifDesc(it.centro_costos)!==it.centro_costos)?' — '+clasifDesc(it.centro_costos):'')) : '')+'" placeholder="código o nombre…" autocomplete="off" onfocus="comboClasRen('+i+')" oninput="comboClasRen('+i+')" onblur="comboHideDelayed()" style="width:100%;'+inp+'"></td>'
       +'<td>'+mods+' '+modInput+'</td>'
       +'<td><input type="text" inputmode="decimal" value="'+fmtNum(it.cant,2)+'" onfocus="this.value=(OG_ITEMS['+i+'].cant!=null?String(OG_ITEMS['+i+'].cant):\'\')" oninput="OG_ITEMS['+i+'].cant=parseNum(this.value);updateOGTotal()" onblur="this.value=fmtNum(OG_ITEMS['+i+'].cant,2)" style="width:100%;text-align:right;'+inp+'"></td>'
       +'<td><select onchange="OG_ITEMS['+i+'].um=this.value" style="width:100%;'+inp+'">'+UM_LIST.map(u=>'<option'+(u===it.um?' selected':'')+'>'+u+'</option>').join('')+'</select></td>'
+      +'<td><select onchange="OG_ITEMS['+i+'].cert_modo=this.value" style="width:100%;'+inp+'" title="Cómo se certifica este renglón"><option value="pct"'+(it.cert_modo!=='unid'?' selected':'')+'>%</option><option value="unid"'+(it.cert_modo==='unid'?' selected':'')+'>Unid</option></select></td>'
       +'<td><input type="text" inputmode="decimal" value="'+fmtNum(it.precio_unit,3)+'" onfocus="this.value=(OG_ITEMS['+i+'].precio_unit!=null?String(OG_ITEMS['+i+'].precio_unit):\'\')" oninput="OG_ITEMS['+i+'].precio_unit=parseNum(this.value);updateOGTotal()" onblur="this.value=fmtNum(OG_ITEMS['+i+'].precio_unit,3)" style="width:100%;text-align:right;'+inp+'"></td>'
       +'<td id="ogit_'+i+'" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fmtImporte(itemTotal(it))+'</td>'
       +'<td><button class="iconbtn del" onclick="delOGItem('+i+')">'+ICO.del+'</button></td></tr>'; }).join('')
@@ -2568,7 +2572,7 @@ function delOGItem(i){ if(OG_ITEMS[i]&&OG_ITEMS[i]._locked){ toast('Ese renglón
 window.addOGItem=addOGItem; window.delOGItem=delOGItem; window.updateOGTotal=updateOGTotal;
 async function saveOG(id){
   const items=OG_ITEMS.filter(it=>(it.cod_art||'').trim()||(it.articulo||'').trim()||it.precio_unit)
-    .map(it=>({cod_art:it.cod_art||'',articulo:it.articulo||'',centro_costos:it.centro_costos||'',modulos:(it.modulos||[]).slice(0,5),cant:+it.cant||0,um:it.um||'UNI',precio_unit:+it.precio_unit||0,imp:it.imp||{}}));
+    .map(it=>({cod_art:it.cod_art||'',articulo:it.articulo||'',hito:it.hito||'',cert_modo:(it.cert_modo==='unid'?'unid':'pct'),centro_costos:it.centro_costos||'',modulos:(it.modulos||[]).slice(0,5),cant:+it.cant||0,um:it.um||'UNI',precio_unit:+it.precio_unit||0,imp:it.imp||{}}));
   const vv=resolveProv(document.getElementById('og_proveedor').value);
   const gv=id=>document.getElementById(id).value;
   const obj={ fecha:gv('og_fecha'),
@@ -2635,12 +2639,25 @@ function openCert(ogId, id){
   if(hasItems){
     const av=cur.avances||{};
     const inp='width:80px;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px;font-size:13px';
-    avanceHtml='<div class="field"><label>Avance de este certificado, por ítem (%)</label>'
-      +'<table class="grid usub"><thead><tr><th>Ítem</th><th>Total</th><th>Ya cert.</th><th>Este cert. %</th></tr></thead><tbody>'
-      +o.items.map((it,idx)=>{ const yaAcum=itemAcumPct(o,idx)-(id!=null?(+av[idx]||0):0); const rem=Math.max(0,100-yaAcum);
-        return '<tr><td>'+esc(it.descripcion||'—')+'</td><td>'+fmtMoney(itemTotal(it))+'</td>'
-        +'<td style="color:var(--muted)">'+yaAcum.toFixed(1).replace('.0','')+'% · resta '+rem.toFixed(1).replace('.0','')+'%</td>'
-        +'<td><input id="ctav_'+idx+'" type="number" step="0.01" value="'+esc(av[idx]!=null?av[idx]:'')+'" style="'+inp+'"></td></tr>'; }).join('')
+    avanceHtml='<div class="field"><label>Avance de este certificado, por ítem</label>'
+      +'<table class="grid usub"><thead><tr><th>Ítem (hito)</th><th>Total</th><th>Ya cert.</th><th>Este certificado</th></tr></thead><tbody>'
+      +o.items.map((it,idx)=>{
+        const modo=it.cert_modo==='unid'?'unid':'pct';
+        const cant=+it.cant||0;
+        const yaAcum=itemAcumPct(o,idx)-(id!=null?(+av[idx]||0):0); const rem=Math.max(0,100-yaAcum);
+        const label=esc(it.hito||it.descripcion||it.articulo||('#'+(idx+1)));
+        let yaCell, inputCell;
+        if(modo==='unid'){
+          const yaU=cant*yaAcum/100, remU=Math.max(0,cant-yaU);
+          const valU=(av[idx]!=null&&cant)?(Math.round(av[idx]/100*cant*10000)/10000):'';
+          yaCell=fmtNum(yaU,2)+' de '+fmtNum(cant,2)+' u · resta '+fmtNum(remU,2)+' u';
+          inputCell='<input id="ctav_'+idx+'" type="number" step="0.01" value="'+esc(valU)+'" placeholder="unidades" oninput="certUnidPreview('+idx+','+cant+')" style="'+inp+'"><div id="ctpct_'+idx+'" style="font-size:10.5px;color:var(--muted)"></div>';
+        } else {
+          yaCell=yaAcum.toFixed(1).replace('.0','')+'% · resta '+rem.toFixed(1).replace('.0','')+'%';
+          inputCell='<input id="ctav_'+idx+'" type="number" step="0.01" value="'+esc(av[idx]!=null?av[idx]:'')+'" placeholder="%" style="'+inp+'">';
+        }
+        return '<tr><td>'+label+'</td><td>'+fmtMoney(itemTotal(it))+'</td><td style="color:var(--muted)">'+yaCell+'</td><td>'+inputCell+'</td></tr>';
+      }).join('')
       +'</tbody></table></div>';
   }else{
     const yaAcum=ogAcumPct(ogId)-(id!=null?(+cur.pct||0):0); const rem=Math.max(0,100-yaAcum);
@@ -2656,6 +2673,8 @@ function openCert(ogId, id){
     '<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" onclick="saveCert('+ogId+','+(id!=null?id:'null')+')">Guardar</button>');
 }
 window.openCert=openCert;
+function certUnidPreview(idx,cant){ const el=document.getElementById('ctav_'+idx), lab=document.getElementById('ctpct_'+idx); if(!el||!lab) return; const u=+el.value||0; const pct=cant?(u/cant*100):0; lab.textContent='= '+pct.toFixed(1).replace('.0','')+'%'; }
+window.certUnidPreview=certUnidPreview;
 async function saveCert(ogId, id){
   if(!canCert()){ toast('No tenés permiso para cargar/editar certificados.'); return; }
   const editando=(id!=null&&id!=='null');
@@ -2664,7 +2683,7 @@ async function saveCert(ogId, id){
   const obj={ og_id:ogId, numero:document.getElementById('ct_num').value, fecha:document.getElementById('ct_fecha').value,
     observaciones:document.getElementById('ct_obs').value };
   if(id==null||id==='null') obj.numero = nextCertNum(o);   // recalcula al guardar (evita colisiones)
-  if(hasItems){ const av={}; o.items.forEach((it,idx)=>{ const el=document.getElementById('ctav_'+idx); if(el && el.value!=='') av[idx]=+el.value; }); obj.avances=av; obj.pct=null; }
+  if(hasItems){ const av={}; o.items.forEach((it,idx)=>{ const el=document.getElementById('ctav_'+idx); if(el && el.value!==''){ let v=+el.value; if(it.cert_modo==='unid'){ const c=+it.cant||0; v = c ? (v/c*100) : 0; } av[idx]=v; } }); obj.avances=av; obj.pct=null; }
   else { const pct=document.getElementById('ct_pct').value; obj.pct=(pct===''?0:+pct); }
   // Validación: el acumulado no puede superar el 100%
   const stored = (id!=null&&id!=='null') ? certsOf(ogId).find(x=>String(x.id)===String(id)) : null;
