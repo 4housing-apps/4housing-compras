@@ -1773,11 +1773,105 @@ window.imputacion=imputacion; window.clasifFamilia=clasifFamilia;
 
 function pbar(pct){ pct=Math.max(0,Math.min(100,pct||0)); return '<div class="pbar"><div style="width:'+pct+'%"></div></div><div style="font-size:11px;color:var(--muted);margin-top:2px">'+pct.toFixed(1).replace('.0','')+'%</div>'; }
 
+let COMPRAS_TAB='ogs';
+let RES_FILTRO={};   // { clasif:[], prov:[], og:[] }
+function setComprasTab(t){ COMPRAS_TAB=t; renderCompras(); }
+window.setComprasTab=setComprasTab;
+function comprasTabs(){
+  return '<div class="mtabs" style="margin-bottom:12px">'
+    +'<button class="mtab'+(COMPRAS_TAB==='ogs'?' active':'')+'" onclick="setComprasTab(\'ogs\')">Órdenes de gasto</button>'
+    +'<button class="mtab'+(COMPRAS_TAB==='resumen'?' active':'')+'" onclick="setComprasTab(\'resumen\')">Resumen</button></div>';
+}
+/* ---- Filtro tipo Excel del Resumen (clasif por renglón, prov y OG por OG) ---- */
+function resColVal(o,col){
+  if(col==='prov') return o.proveedor_cod||'(sin proveedor)';
+  if(col==='og') return o.numero?('OG '+o.numero):'(sin N°)';
+  return '';
+}
+function resUnique(col){
+  const s=new Set();
+  (mem.ogs||[]).forEach(o=>{ if(o.anulada) return;
+    if(col==='clasif'){ (o.items||[]).forEach(it=>{ if(it.centro_costos) s.add(it.centro_costos); }); }
+    else { const v=resColVal(o,col); if(v) s.add(v); }
+  });
+  return [...s].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true}));
+}
+function resFilterActive(col){ return !!(RES_FILTRO[col] && RES_FILTRO[col].length); }
+function resPass(o){
+  return Object.keys(RES_FILTRO).every(col=>{ const allow=RES_FILTRO[col]; if(!allow||!allow.length) return true;
+    if(col==='clasif') return (o.items||[]).some(it=>allow.includes(it.centro_costos));
+    return allow.includes(resColVal(o,col));
+  });
+}
+function closeResFilter(){ const p=document.getElementById('resFilterPop'); if(p) p.remove(); document.removeEventListener('mousedown', resFilterOutside, true); }
+function resFilterOutside(e){ const p=document.getElementById('resFilterPop'); if(p && !p.contains(e.target) && !(e.target.closest && e.target.closest('.resfbtn'))) closeResFilter(); }
+function openResFilter(col, ev){
+  ev.stopPropagation(); const btn=ev.currentTarget; closeResFilter();
+  const vals=resUnique(col); const sel = RES_FILTRO[col] ? new Set(RES_FILTRO[col]) : new Set(vals);
+  const item=v=>'<label class="resfitem" data-v="'+esc(v)+'" style="display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer"><input type="checkbox" class="resfchk" value="'+esc(v)+'" '+(sel.has(v)?'checked':'')+'>'+esc(v)+'</label>';
+  const pop=document.createElement('div'); pop.id='resFilterPop';
+  pop.style.cssText='position:absolute;z-index:9999;background:#fff;border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;min-width:210px;max-width:300px;font-size:12.5px';
+  pop.innerHTML='<input type="text" placeholder="Buscar" oninput="resFilterSearch(this.value)" style="width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12.5px">'
+    +'<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-weight:700;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer"><input type="checkbox" '+(sel.size===vals.length?'checked':'')+' onchange="resFilterToggleAll(this.checked)">(Seleccionar todo)</label>'
+    +'<div id="resfList" style="max-height:220px;overflow:auto">'+vals.map(item).join('')+'</div>'
+    +'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm" style="flex:1" onclick="resFilterApply(\''+col+'\')">Aplicar</button><button class="btn ghost sm" style="flex:1" onclick="resFilterClear(\''+col+'\')">Limpiar</button></div>';
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(); const vw=document.documentElement.clientWidth;
+  pop.style.top=(window.scrollY+r.bottom+4)+'px'; pop.style.left=(window.scrollX+Math.max(8,Math.min(r.left, vw-310)))+'px';
+  setTimeout(()=>document.addEventListener('mousedown', resFilterOutside, true),0);
+}
+function resFilterSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#resfList .resfitem').forEach(el=>{ el.style.display=el.getAttribute('data-v').toLowerCase().includes(q)?'flex':'none'; }); }
+function resFilterToggleAll(ck){ document.querySelectorAll('#resfList .resfitem').forEach(el=>{ if(el.style.display!=='none'){ const c=el.querySelector('.resfchk'); if(c) c.checked=ck; } }); }
+function resFilterApply(col){ const all=[...document.querySelectorAll('#resfList .resfchk')]; const chk=all.filter(c=>c.checked).map(c=>c.value); if(chk.length===all.length){ delete RES_FILTRO[col]; } else { RES_FILTRO[col]=chk; } closeResFilter(); renderCompras(); }
+function resFilterClear(col){ delete RES_FILTRO[col]; closeResFilter(); renderCompras(); }
+function resFilterClearAll(){ RES_FILTRO={}; renderCompras(); }
+window.openResFilter=openResFilter; window.resFilterSearch=resFilterSearch; window.resFilterToggleAll=resFilterToggleAll; window.resFilterApply=resFilterApply; window.resFilterClear=resFilterClear; window.resFilterClearAll=resFilterClearAll;
+
+function comprasResumenView(ogsAll){
+  const fmt2=x=>(+x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  let ogs=(ogsAll||[]).filter(o=>!o.anulada).filter(resPass);
+  ogs.sort((a,b)=>String(a.numero||'').localeCompare(String(b.numero||''),'es',{numeric:true}));
+  let totARS=0, totUSD=0;
+  const pf=v=>v.toFixed(1).replace('.0','')+'%';
+  const rows=ogs.map(o=>{
+    const mon=ogMonedaCode(o); const tc=(o.tc_pesos!=null&&o.tc_pesos!=='')?+o.tc_pesos:null;
+    const total=ogTotal(o), cert=ogAcumMonto(o), lib=ogLiberado(o), pag=ogPagado(o);
+    const noCert=Math.max(0,total-cert), certNoLib=Math.max(0,cert-lib), libNoPag=Math.max(0,lib-pag);
+    const p=x=>total?x/total*100:0;
+    let tARS,tUSD;
+    if(mon==='USD'){ tUSD=total; tARS= tc!=null? total*tc : null; } else { tARS=total; tUSD= tc!=null? total/tc : null; }
+    if(tARS!=null) totARS+=tARS; if(tUSD!=null) totUSD+=tUSD;
+    return '<tr>'
+      +'<td>'+(o.clasif_og?esc(o.clasif_og):'—')+'</td>'
+      +'<td style="font-size:11px">'+esc(o.proveedor_cod||'')+'</td>'
+      +'<td><strong>'+esc(o.numero||'—')+'</strong></td>'
+      +'<td style="text-align:right">'+(tARS!=null?'$ '+fmt2(tARS):'—')+'</td>'
+      +'<td style="text-align:right">'+(tUSD!=null?'US$ '+fmt2(tUSD):'—')+'</td>'
+      +'<td style="text-align:right">'+pf(p(noCert))+'</td>'
+      +'<td style="text-align:right">'+pf(p(certNoLib))+'</td>'
+      +'<td style="text-align:right">'+pf(p(libNoPag))+'</td>'
+      +'<td style="text-align:right">'+pf(p(pag))+'</td></tr>';
+  }).join('') || '<tr><td colspan="9" style="color:var(--muted);padding:14px">Ninguna OG coincide con los filtros.</td></tr>';
+  const foot='<tr style="border-top:2px solid var(--line-strong);font-weight:700"><td colspan="3" style="text-align:right">Total mostrado</td>'
+    +'<td style="text-align:right">'+(totARS?'$ '+fmt2(totARS):'—')+'</td><td style="text-align:right">'+(totUSD?'US$ '+fmt2(totUSD):'—')+'</td><td colspan="4"></td></tr>';
+  const th=(label,col)=>'<th style="white-space:nowrap">'+label+(col?' <button class="resfbtn" onclick="openResFilter(\''+col+'\',event)" title="Filtrar" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:11px;color:'+(resFilterActive(col)?'var(--olive-deep)':'var(--muted)')+'">▾</button>':'')+'</th>';
+  const hay=['clasif','prov','og'].some(resFilterActive);
+  const limpiar=hay?'<button class="btn ghost sm" style="margin-left:auto" onclick="resFilterClearAll()">Limpiar filtros</button>':'';
+  return '<div class="card"><div class="card-h"><h3>Resumen por OG</h3><span class="meta">Filtrá por Clasificación (por renglón), Proveedor u OG. Totales con el TC de cada OG.</span>'+limpiar+'</div>'
+    +'<table class="grid" style="font-size:12px"><thead><tr>'
+    +th('Clasificación','clasif')+th('Proveedor','prov')+th('OG','og')
+    +'<th style="text-align:right">Total ARS</th><th style="text-align:right">Total USD</th>'
+    +'<th style="text-align:right">% pend. cert.</th><th style="text-align:right">% cert. no lib.</th><th style="text-align:right">% lib. no pag.</th><th style="text-align:right">% pagado</th>'
+    +'</tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
+}
+
 async function renderCompras(){
   C().innerHTML='<div class="empty">Cargando…</div>';
   let ogsAll;
   try{ ogsAll = (mem.ogs||[]).slice(); }
   catch(e){ C().innerHTML='<div class="empty" style="color:#b4554e">No se pudo cargar: '+esc(e.message)+'</div>'; return; }
+
+  if(COMPRAS_TAB==='resumen'){ C().innerHTML=comprasTabs()+comprasResumenView(ogsAll); return; }
 
   // Filtros por rol (comprador / certificador / estado del proceso)
   let ogs=ogsAll.slice();
@@ -1845,7 +1939,7 @@ async function renderCompras(){
   }
   const demoTag=DEMO_MODE?'<span class="demo-tag">DATOS DE EJEMPLO</span>':'';
   const usdTxt = USD_VENTA ? ' · USD venta $'+USD_VENTA+(USD_FECHA?' ('+USD_FECHA.split('-').reverse().join('/')+')':'') : ' · USD: cargá conexión';
-  C().innerHTML='<div class="kpi-grid">'+kpis+'</div>'+filtros+'<div class="card"><div class="card-h"><h3>Órdenes de gasto'+demoTag+'</h3><span class="meta">N° ≥ 2000 = de esta herramienta'+usdTxt+'</span></div>'+body+'</div>';
+  C().innerHTML=comprasTabs()+'<div class="kpi-grid">'+kpis+'</div>'+filtros+'<div class="card"><div class="card-h"><h3>Órdenes de gasto'+demoTag+'</h3><span class="meta">N° ≥ 2000 = de esta herramienta'+usdTxt+'</span></div>'+body+'</div>';
 }
 
 function certInner(o){
