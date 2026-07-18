@@ -1865,6 +1865,44 @@ function comprasResumenView(ogsAll){
     +'</tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
 }
 
+/* ===== Filtro tipo Excel para la lista de Órdenes de gasto ===== */
+let OGX={};  // { field: [valores permitidos] }
+function ogxName(n){ n=(n||'').trim(); if(!n) return '—'; const p=n.split(','); if(p.length>=2){ const ape=p[0].trim(); const nom=p[1].trim(); return ape+(nom?', '+nom.charAt(0).toUpperCase():''); } return n; }
+function ogxVal(o,f){
+  if(f==='og') return o.numero?String(o.numero):'(sin N°)';
+  if(f==='estado') return ogEstado(o);
+  if(f==='proveedor') return o.proveedor_cod||'(sin proveedor)';
+  if(f==='solp') return (o.solp!=null&&o.solp!=='')?String(o.solp):'(sin SOLP)';
+  if(f==='comprador') return o.comprador||'(sin comprador)';
+  if(f==='certificador') return o.certificador||'(sin certificador)';
+  return '';
+}
+function ogxUnique(f){ const s=new Set(); (mem.ogs||[]).forEach(o=>{ if(f==='clasif'){ (o.items||[]).forEach(it=>{ if(it.centro_costos) s.add(it.centro_costos); }); } else { const v=ogxVal(o,f); if(v) s.add(v); } }); return [...s].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})); }
+function ogxActive(f){ return !!(OGX[f]&&OGX[f].length); }
+function ogxPass(o){ return Object.keys(OGX).every(f=>{ const a=OGX[f]; if(!a||!a.length) return true; if(f==='clasif') return (o.items||[]).some(it=>a.includes(it.centro_costos)); return a.includes(ogxVal(o,f)); }); }
+function ogxClose(){ const p=document.getElementById('ogxPop'); if(p)p.remove(); document.removeEventListener('mousedown',ogxOutside,true); }
+function ogxOutside(e){ const p=document.getElementById('ogxPop'); if(p&&!p.contains(e.target)&&!(e.target.closest&&e.target.closest('.ogxbtn'))) ogxClose(); }
+function ogxOpen(f,ev){ ev.stopPropagation(); const btn=ev.currentTarget; ogxClose();
+  const vals=ogxUnique(f); const sel=OGX[f]?new Set(OGX[f]):new Set(vals);
+  const item=v=>'<label class="ogxitem" data-v="'+esc(v)+'" style="display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer"><input type="checkbox" class="ogxchk" value="'+esc(v)+'" '+(sel.has(v)?'checked':'')+'>'+esc(v)+'</label>';
+  const pop=document.createElement('div'); pop.id='ogxPop';
+  pop.style.cssText='position:absolute;z-index:9999;background:#fff;border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;min-width:210px;max-width:320px;font-size:12.5px';
+  pop.innerHTML='<input type="text" placeholder="Buscar" oninput="ogxSearch(this.value)" style="width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12.5px">'
+    +'<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-weight:700;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer"><input type="checkbox" '+(sel.size===vals.length?'checked':'')+' onchange="ogxToggleAll(this.checked)">(Seleccionar todo)</label>'
+    +'<div id="ogxList" style="max-height:230px;overflow:auto">'+vals.map(item).join('')+'</div>'
+    +'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm" style="flex:1" onclick="ogxApply(\''+f+'\')">Aplicar</button><button class="btn ghost sm" style="flex:1" onclick="ogxClear(\''+f+'\')">Limpiar</button></div>';
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(); const vw=document.documentElement.clientWidth;
+  pop.style.top=(window.scrollY+r.bottom+4)+'px'; pop.style.left=(window.scrollX+Math.max(8,Math.min(r.left,vw-330)))+'px';
+  setTimeout(()=>document.addEventListener('mousedown',ogxOutside,true),0);
+}
+function ogxSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#ogxList .ogxitem').forEach(el=>{ el.style.display=el.getAttribute('data-v').toLowerCase().includes(q)?'flex':'none'; }); }
+function ogxToggleAll(ck){ document.querySelectorAll('#ogxList .ogxitem').forEach(el=>{ if(el.style.display!=='none'){ const c=el.querySelector('.ogxchk'); if(c)c.checked=ck; } }); }
+function ogxApply(f){ const all=[...document.querySelectorAll('#ogxList .ogxchk')]; const chk=all.filter(c=>c.checked).map(c=>c.value); if(chk.length===all.length){ delete OGX[f]; } else { OGX[f]=chk; } ogxClose(); renderCompras(); }
+function ogxClear(f){ delete OGX[f]; ogxClose(); renderCompras(); }
+function ogxClearAll(){ OGX={}; renderCompras(); }
+window.ogxOpen=ogxOpen; window.ogxSearch=ogxSearch; window.ogxToggleAll=ogxToggleAll; window.ogxApply=ogxApply; window.ogxClear=ogxClear; window.ogxClearAll=ogxClearAll;
+
 async function renderCompras(){
   C().innerHTML='<div class="empty">Cargando…</div>';
   let ogsAll;
@@ -1873,15 +1911,8 @@ async function renderCompras(){
 
   if(COMPRAS_TAB==='resumen'){ C().innerHTML=comprasTabs()+comprasResumenView(ogsAll); return; }
 
-  // Filtros por rol (comprador / certificador / estado del proceso)
-  let ogs=ogsAll.slice();
-  if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
-  if(OG_FILTRO.proveedor) ogs=ogs.filter(o=>(o.proveedor_cod||'')===OG_FILTRO.proveedor);
-  if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
-  if(OG_FILTRO.clasifRenglon) ogs=ogs.filter(o=>(o.items||[]).some(it=>it.centro_costos===OG_FILTRO.clasifRenglon));
-  if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
-  else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
-  else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
+  // Filtro tipo Excel por columnas
+  let ogs=ogsAll.filter(ogxPass);
 
   const acc={ARS:{comp:0,cert:0,lib:0,pag:0}, USD:{comp:0,cert:0,lib:0,pag:0}};
   ogs.forEach(o=>{ const m=ogMonedaCode(o); acc[m].comp+=ogTotal(o); acc[m].cert+=ogAcumMonto(o); acc[m].lib+=ogLiberado(o); acc[m].pag+=ogPagado(o); });
@@ -1893,27 +1924,10 @@ async function renderCompras(){
     +K('Liberado a pagar', dual(acc.ARS.lib-acc.ARS.pag, acc.USD.lib-acc.USD.pag),'Aprobado y sin pagar')
     +K('Pagado', dual(acc.ARS.pag,acc.USD.pag),'Ya abonado por tesorería');
 
-  // barra de filtros
-  const compradores=[...new Set(ogsAll.map(o=>o.comprador).filter(Boolean))].sort();
-  const certifs=[...new Set(ogsAll.map(o=>o.certificador).filter(Boolean))].sort();
-  const provsMap={}; ogsAll.forEach(o=>{ if(o.proveedor_cod) provsMap[o.proveedor_cod]=o.proveedor||''; });
-  const provs=Object.keys(provsMap).sort();
-  const selProv='<option value="">Proveedor: todos</option>'+provs.map(c=>'<option value="'+esc(c)+'"'+(OG_FILTRO.proveedor===c?' selected':'')+'>'+esc(c+(provsMap[c]?' · '+provsMap[c]:''))+'</option>').join('');
-  const selEstado=[['todas','Todas'],['por_certificar','Por certificar'],['a_pagar','Liberadas a pagar (tesorería)'],['pagadas','Pagadas']]
-    .map(x=>'<option value="'+x[0]+'"'+(OG_FILTRO.estado===x[0]?' selected':'')+'>'+x[1]+'</option>').join('');
-  const selComp='<option value="">Comprador: todos</option>'+compradores.map(n=>'<option'+(OG_FILTRO.comprador===n?' selected':'')+'>'+esc(n)+'</option>').join('');
-  const selCert='<option value="">Certifica: todos</option>'+certifs.map(n=>'<option'+(OG_FILTRO.certificador===n?' selected':'')+'>'+esc(n)+'</option>').join('');
-  const clasifSet=new Set(); ogsAll.forEach(o=>(o.items||[]).forEach(it=>{ if(it.centro_costos) clasifSet.add(it.centro_costos); }));
-  const selClasif='<option value="">Clasificación: todas</option>'+[...clasifSet].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})).map(c=>'<option value="'+esc(c)+'"'+(OG_FILTRO.clasifRenglon===c?' selected':'')+'>'+esc(c)+'</option>').join('');
-  const fsty='border:1px solid var(--line-strong);border-radius:9px;padding:7px 10px;font-size:12.5px;background:#fff';
-  const activo = OG_FILTRO.comprador||OG_FILTRO.certificador||OG_FILTRO.proveedor||OG_FILTRO.clasifRenglon||OG_FILTRO.estado!=='todas';
-  const filtros='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
-    +'<select style="'+fsty+'" onchange="setOGFiltro(\'estado\',this.value)">'+selEstado+'</select>'
-    +'<select style="'+fsty+'" onchange="setOGFiltro(\'clasifRenglon\',this.value)">'+selClasif+'</select>'
-    +'<select style="'+fsty+'" onchange="setOGFiltro(\'proveedor\',this.value)">'+selProv+'</select>'
-    +'<select style="'+fsty+'" onchange="setOGFiltro(\'comprador\',this.value)">'+selComp+'</select>'
-    +'<select style="'+fsty+'" onchange="setOGFiltro(\'certificador\',this.value)">'+selCert+'</select>'
-    +(activo?'<button class="btn ghost sm" onclick="limpiarOGFiltro()">Limpiar filtros</button>':'')
+  // barra slim: limpiar filtros + contador (los filtros van en los encabezados)
+  const hayFiltroOG=Object.keys(OGX).some(ogxActive);
+  const filtros='<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'
+    +(hayFiltroOG?'<button class="btn ghost sm" onclick="ogxClearAll()">Limpiar filtros</button>':'')
     +'<span style="font-size:11.5px;color:var(--muted);margin-left:auto">'+ogs.length+' de '+ogsAll.length+' OG</span></div>';
 
   let body;
@@ -1923,9 +1937,10 @@ async function renderCompras(){
       const exp=OG_EXPANDED.has(o.id);
       const nCert=certsOf(o.id).length;
       const nItems=(o.items||[]).length;
-      const roles=(o.comprador||o.certificador)?'<div style="font-size:11px;color:var(--muted)">'+(o.comprador?'compra: '+esc(o.comprador):'')+(o.comprador&&o.certificador?' · ':'')+(o.certificador?'certifica: '+esc(o.certificador):'')+'</div>':'';
       const head='<tr class="og-head">'
-        +'<td><button class="iconbtn" title="Ver detalle" onclick="toggleOG('+o.id+')" style="margin-right:4px">'+(exp?'▾':'▸')+'</button><strong>'+esc(o.numero||'—')+'</strong>'+roles+'</td>'
+        +'<td><button class="iconbtn" title="Ver detalle" onclick="toggleOG('+o.id+')" style="margin-right:4px">'+(exp?'▾':'▸')+'</button><strong>'+esc(o.numero||'—')+'</strong></td>'
+        +'<td style="font-size:11.5px;color:var(--muted)" title="'+esc(o.comprador||'')+'">'+(o.comprador?esc(ogxName(o.comprador)):'—')+'</td>'
+        +'<td style="font-size:11.5px;color:var(--muted)" title="'+esc(o.certificador||'')+'">'+(o.certificador?esc(ogxName(o.certificador)):'—')+'</td>'
         +'<td style="font-size:12px;color:var(--muted)">'+(o.proveedor_cod?esc(o.proveedor_cod):'—')+'</td>'
         +'<td style="color:var(--muted)">'+(o.clasif_og?('<strong>'+esc(o.clasif_og)+'</strong>'+(clasifDesc(o.clasif_og)&&clasifDesc(o.clasif_og)!==o.clasif_og?'<span style="font-size:11px"> · '+esc(clasifDesc(o.clasif_og))+'</span>':'')):esc(o.objeto||''))+'</td>'
         +'<td style="color:var(--muted)">'+(o.solp!=null&&o.solp!==''?esc(o.solp):'—')+'</td>'
@@ -1939,7 +1954,11 @@ async function renderCompras(){
         +'</div></td></tr>';
       return head+(exp?ogDetail(o):'');
     }).join('');
-    body='<table class="grid og-grid" style="font-size:12.5px"><thead><tr><th>OG</th><th>Proveedor</th><th>Clasificación</th><th>SOLP</th><th>Detalle</th><th>Total</th><th>Avance</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead><tbody>'+tr+'</tbody></table>';
+    const thx=(label,f,extra)=>'<th'+(extra||'')+'>'+label+' <button class="ogxbtn" onclick="ogxOpen(\''+f+'\',event)" title="Filtrar" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:11px;color:'+(ogxActive(f)?'var(--olive-deep)':'var(--muted)')+'">▾</button></th>';
+    body='<table class="grid og-grid" style="font-size:12.5px"><thead><tr>'
+      +thx('OG','og')+thx('Comprador','comprador')+thx('Certificador','certificador')+thx('Proveedor','proveedor')+thx('Clasificación','clasif')+thx('SOLP','solp')
+      +'<th>Detalle</th><th>Total</th><th>Avance</th>'+thx('Estado','estado')+'<th style="text-align:right">Acciones</th>'
+      +'</tr></thead><tbody>'+tr+'</tbody></table>';
   }
   const demoTag=DEMO_MODE?'<span class="demo-tag">DATOS DE EJEMPLO</span>':'';
   const usdTxt = USD_VENTA ? ' · USD venta $'+USD_VENTA+(USD_FECHA?' ('+USD_FECHA.split('-').reverse().join('/')+')':'') : ' · USD: cargá conexión';
@@ -1977,7 +1996,7 @@ function ogDetail(o){
           +'<td>'+ac.toFixed(1).replace('.0','')+'%</td></tr>'; }).join('')
       +'</tbody></table>'
     : '<div style="font-size:12.5px;color:var(--muted);padding:2px 0">Sin renglones — se certifica a nivel OG por el monto total.</div>';
-  return '<tr class="detail-row"><td colspan="9"><div class="detail-wrap">'
+  return '<tr class="detail-row"><td colspan="11"><div class="detail-wrap">'
     +'<div class="detail-h"><span>Renglones de OG '+esc(o.numero||'')+(o.proveedor?' · '+esc((o.proveedor_cod?o.proveedor_cod+' — ':'')+o.proveedor):'')+'</span>'
     +'<button class="btn ghost sm" onclick="openOG('+o.id+')">'+ICO.edit+'Editar OG</button></div>'+reng
     +certInner(o)+'</div></td></tr>';
@@ -2119,15 +2138,7 @@ function asientoRows(ogs){
 }
 window.asientoRows=asientoRows;
 function ogsFiltradas(){
-  let ogs=(mem.ogs||[]).slice();
-  if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
-  if(OG_FILTRO.proveedor) ogs=ogs.filter(o=>(o.proveedor_cod||'')===OG_FILTRO.proveedor);
-  if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
-  if(OG_FILTRO.clasifRenglon) ogs=ogs.filter(o=>(o.items||[]).some(it=>it.centro_costos===OG_FILTRO.clasifRenglon));
-  if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
-  else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
-  else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
-  return ogs;
+  return (mem.ogs||[]).filter(ogxPass);
 }
 function exportAsientoExcel(){
   if(typeof XLSX==='undefined'){ toast('Para exportar necesitás conexión (se carga la librería).'); return; }
@@ -2520,14 +2531,7 @@ window.setSaldoIni=setSaldoIni;
 function exportOGExcel(){
   if(typeof XLSX==='undefined'){ toast('Para exportar necesitás conexión a internet (se carga la librería).'); return; }
   // respeta el filtro actual
-  let ogs=(mem.ogs||[]).slice();
-  if(OG_FILTRO.comprador) ogs=ogs.filter(o=>o.comprador===OG_FILTRO.comprador);
-  if(OG_FILTRO.proveedor) ogs=ogs.filter(o=>(o.proveedor_cod||'')===OG_FILTRO.proveedor);
-  if(OG_FILTRO.certificador) ogs=ogs.filter(o=>o.certificador===OG_FILTRO.certificador);
-  if(OG_FILTRO.clasifRenglon) ogs=ogs.filter(o=>(o.items||[]).some(it=>it.centro_costos===OG_FILTRO.clasifRenglon));
-  if(OG_FILTRO.estado==='por_certificar') ogs=ogs.filter(o=>ogAcumPct(o.id)<99.999);
-  else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
-  else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
+  let ogs=(mem.ogs||[]).filter(ogxPass);
   const rows=ogReportRows(ogs);
   const ws=XLSX.utils.aoa_to_sheet(rows);
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Seguimiento');
