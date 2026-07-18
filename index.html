@@ -1788,14 +1788,15 @@ async function renderCompras(){
   else if(OG_FILTRO.estado==='a_pagar') ogs=ogs.filter(o=>(ogLiberado(o)-ogPagado(o))>0.005);
   else if(OG_FILTRO.estado==='pagadas') ogs=ogs.filter(o=>ogPagado(o)>0.005 && (ogLiberado(o)-ogPagado(o))<=0.005);
 
-  let comprometido=0, certificado=0, liberado=0, pagado=0;
-  ogs.forEach(o=>{ comprometido+=ogTotal(o); certificado+=ogAcumMonto(o); liberado+=ogLiberado(o); pagado+=ogPagado(o); });
-  const aPagar=liberado-pagado;
-  const K=(l,v,s,t)=>'<div class="kpi"><div class="kpi-label">'+l+'</div><div class="kpi-value '+(t||'')+'">'+v+'</div><div class="kpi-sub">'+esc(s||'')+'</div></div>';
-  const kpis=K('Comprometido', fmtMoney(comprometido),'Suma de OGs')
-    +K('Certificado', fmtMoney(certificado),'Avance acumulado')
-    +K('Liberado a pagar', fmtMoney(aPagar),'Aprobado y sin pagar', aPagar>0?'bad':'ok')
-    +K('Pagado', fmtMoney(pagado),'Ya abonado por tesorería','ok');
+  const acc={ARS:{comp:0,cert:0,lib:0,pag:0}, USD:{comp:0,cert:0,lib:0,pag:0}};
+  ogs.forEach(o=>{ const m=ogMonedaCode(o); acc[m].comp+=ogTotal(o); acc[m].cert+=ogAcumMonto(o); acc[m].lib+=ogLiberado(o); acc[m].pag+=ogPagado(o); });
+  const kf=x=>(+x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const dual=(ars,usd)=>'<div style="font-size:20px;line-height:1.3">$ '+kf(ars)+'</div><div style="font-size:20px;line-height:1.3;color:var(--olive-deep)">US$ '+kf(usd)+'</div>';
+  const K=(l,v,s)=>'<div class="kpi"><div class="kpi-label">'+l+'</div><div class="kpi-value" style="font-size:inherit">'+v+'</div><div class="kpi-sub">'+esc(s||'')+'</div></div>';
+  const kpis=K('Comprometido', dual(acc.ARS.comp,acc.USD.comp),'Suma de OGs · por moneda')
+    +K('Certificado', dual(acc.ARS.cert,acc.USD.cert),'Avance acumulado')
+    +K('Liberado a pagar', dual(acc.ARS.lib-acc.ARS.pag, acc.USD.lib-acc.USD.pag),'Aprobado y sin pagar')
+    +K('Pagado', dual(acc.ARS.pag,acc.USD.pag),'Ya abonado por tesorería');
 
   // barra de filtros
   const compradores=[...new Set(ogsAll.map(o=>o.comprador).filter(Boolean))].sort();
@@ -1831,7 +1832,7 @@ async function renderCompras(){
         +'<td style="color:var(--muted)">'+(o.clasif_og?('<strong>'+esc(o.clasif_og)+'</strong>'+(clasifDesc(o.clasif_og)&&clasifDesc(o.clasif_og)!==o.clasif_og?'<span style="font-size:11px"> · '+esc(clasifDesc(o.clasif_og))+'</span>':'')):esc(o.objeto||''))+'</td>'
         +'<td style="color:var(--muted)">'+(o.solp!=null&&o.solp!==''?esc(o.solp):'—')+'</td>'
         +'<td style="font-size:11px;color:var(--muted)">'+(nItems?nItems+' renglón'+(nItems>1?'es':''):'—')+(nCert?' · '+nCert+' cert.':'')+'</td>'
-        +'<td><strong>'+fmtMoney(ogTotal(o))+'</strong></td>'
+        +'<td><strong>'+(ogMonedaCode(o)==='USD'?'US$ ':'$')+ogTotal(o).toLocaleString('es-AR')+'</strong></td>'
         +'<td style="min-width:110px">'+pbar(ogAcumPct(o.id))+'</td>'
         +'<td>'+badge(ogEstado(o))+'</td>'
         +'<td><div class="row-actions">'
