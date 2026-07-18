@@ -2128,17 +2128,57 @@ function proyectadoView(){
   return resumen+detalle;
 }
 window.proyectadoView=proyectadoView;
+
+/* ===== Filtro tipo Excel para Órdenes de pago ===== */
+let OP_FILTRO={};   // { col: [valores permitidos] }  · ausente = sin filtro
+function opColVal(p,col){
+  const o=ogById(p.og_id)||{};
+  if(col==='prov') return o.proveedor_cod||'';
+  if(col==='clasif') return o.clasif_og||'';
+  if(col==='solp') return (o.solp!=null&&o.solp!=='')?String(o.solp):'(sin SOLP)';
+  if(col==='comprador') return o.comprador||'';
+  if(col==='medio') return p.medio||'';
+  if(col==='caja') return (CAJAS[p.moneda_pago]?CAJAS[p.moneda_pago].nombre:p.moneda_pago)||'';
+  return '';
+}
+function opUniqueVals(col){ const s=new Set(); (mem.pagos||[]).forEach(p=>{ const v=opColVal(p,col); if(v!=='') s.add(v); }); return [...s].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})); }
+function opFilterActive(col){ return !!(OP_FILTRO[col] && OP_FILTRO[col].length); }
+function opPassFilter(p){ return Object.keys(OP_FILTRO).every(col=>{ const allow=OP_FILTRO[col]; if(!allow||!allow.length) return true; return allow.includes(opColVal(p,col)); }); }
+function closeOpFilter(){ const p=document.getElementById('opFilterPop'); if(p) p.remove(); document.removeEventListener('mousedown', opFilterOutside, true); }
+function opFilterOutside(e){ const p=document.getElementById('opFilterPop'); if(p && !p.contains(e.target) && !(e.target.closest && e.target.closest('.opfbtn'))) closeOpFilter(); }
+function openOpFilter(col, ev){
+  ev.stopPropagation(); const btn=ev.currentTarget; closeOpFilter();
+  const vals=opUniqueVals(col); const sel = OP_FILTRO[col] ? new Set(OP_FILTRO[col]) : new Set(vals);
+  const item=v=>'<label class="opfitem" data-v="'+esc(v)+'" style="display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer"><input type="checkbox" class="opfchk" value="'+esc(v)+'" '+(sel.has(v)?'checked':'')+'>'+esc(v)+'</label>';
+  const pop=document.createElement('div'); pop.id='opFilterPop';
+  pop.style.cssText='position:absolute;z-index:9999;background:#fff;border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;min-width:210px;max-width:290px;font-size:12.5px';
+  pop.innerHTML='<input type="text" placeholder="Buscar" oninput="opFilterSearch(this.value)" style="width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12.5px">'
+    +'<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-weight:700;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer"><input type="checkbox" id="opfAll" '+(sel.size===vals.length?'checked':'')+' onchange="opFilterToggleAll(this.checked)">(Seleccionar todo)</label>'
+    +'<div id="opfList" style="max-height:220px;overflow:auto">'+vals.map(item).join('')+'</div>'
+    +'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm" style="flex:1" onclick="opFilterApply(\''+col+'\')">Aplicar</button><button class="btn ghost sm" style="flex:1" onclick="opFilterClear(\''+col+'\')">Limpiar</button></div>';
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(); const vw=document.documentElement.clientWidth;
+  pop.style.top=(window.scrollY+r.bottom+4)+'px';
+  pop.style.left=(window.scrollX+Math.max(8,Math.min(r.left, vw-300)))+'px';
+  setTimeout(()=>document.addEventListener('mousedown', opFilterOutside, true),0);
+}
+function opFilterSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#opfList .opfitem').forEach(el=>{ el.style.display = el.getAttribute('data-v').toLowerCase().includes(q)?'flex':'none'; }); }
+function opFilterToggleAll(ck){ document.querySelectorAll('#opfList .opfitem').forEach(el=>{ if(el.style.display!=='none'){ const c=el.querySelector('.opfchk'); if(c) c.checked=ck; } }); }
+function opFilterApply(col){ const all=[...document.querySelectorAll('#opfList .opfchk')]; const chk=all.filter(c=>c.checked).map(c=>c.value); if(chk.length===all.length){ delete OP_FILTRO[col]; } else { OP_FILTRO[col]=chk; } closeOpFilter(); renderTesoreria(); }
+function opFilterClear(col){ delete OP_FILTRO[col]; closeOpFilter(); renderTesoreria(); }
+function opFilterClearAll(){ OP_FILTRO={}; renderTesoreria(); }
+window.openOpFilter=openOpFilter; window.opFilterSearch=opFilterSearch; window.opFilterToggleAll=opFilterToggleAll; window.opFilterApply=opFilterApply; window.opFilterClear=opFilterClear; window.opFilterClearAll=opFilterClearAll;
+
 function opsView(){
-  const pagos=(mem.pagos||[]).slice();
+  let pagos=(mem.pagos||[]).slice();
   if(!pagos.length) return '<div class="card"><div class="empty">Todavía no se registraron pagos / órdenes de pago.</div></div>';
-  // ordenar por N° de OP y, dentro, por OG
+  pagos=pagos.filter(opPassFilter);   // filtro tipo Excel
   pagos.sort((a,b)=>((+a.op_numero||1e9)-(+b.op_numero||1e9)) || (String(a.numero||'').localeCompare(String(b.numero||''))));
   let totARS=0, totUSD=0;
   const fmt2=x=>(+x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const rows=pagos.map(p=>{
     const o=ogById(p.og_id)||{};
     const mon=p.moneda_pago; const imp=+p.importe_pago||0; const tc=+p.tc||0;
-    // Montos reales del pago en cada moneda
     let mUSD=null, mARS=null;
     if(mon==='USD'){ mUSD=imp; mARS = tc? imp*tc : null; }
     else { mARS=imp; mUSD = tc? imp/tc : null; }
@@ -2156,12 +2196,15 @@ function opsView(){
       +'<td style="text-align:right">'+(tc?fmtNum(tc,2):'—')+'</td>'
       +'<td style="text-align:right">'+(mUSD!=null?'US$ '+fmt2(mUSD):'—')+'</td>'
       +'<td style="text-align:right"><strong>'+(mARS!=null?'$ '+fmt2(mARS):'—')+'</strong></td></tr>';
-  }).join('');
+  }).join('') || '<tr><td colspan="12" style="color:var(--muted);padding:14px">Ningún pago coincide con los filtros.</td></tr>';
   const foot='<tr style="border-top:2px solid var(--line-strong);font-weight:700"><td colspan="10" style="text-align:right">Total mostrado</td>'
     +'<td style="text-align:right">'+(totUSD?'US$ '+fmt2(totUSD):'—')+'</td>'
     +'<td style="text-align:right">'+(totARS?'$ '+fmt2(totARS):'—')+'</td></tr>';
-  return '<div class="card"><div class="card-h"><h3>Órdenes de pago</h3><span class="meta">Una fila por OG pagada. Cuando una OP agrupe varias OG, el N° de OP se repite. El asiento se generará por OP (próximo paso).</span></div>'
-    +'<table class="grid" style="font-size:12.5px"><thead><tr><th>OP N°</th><th>Fecha</th><th>OG</th><th>Prov.</th><th>Clasif.</th><th>SOLP</th><th>Comprador</th><th>Medio</th><th>Caja</th><th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
+  const th=(label,col)=>'<th style="white-space:nowrap">'+label+(col?' <button class="opfbtn" onclick="openOpFilter(\''+col+'\',event)" title="Filtrar" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:11px;color:'+(opFilterActive(col)?'var(--olive-deep)':'var(--muted)')+'">▾</button>':'')+'</th>';
+  const hayFiltro=Object.keys(OP_FILTRO).some(c=>opFilterActive(c));
+  const limpiar = hayFiltro ? '<button class="btn ghost sm" style="margin-left:auto" onclick="opFilterClearAll()">Limpiar filtros</button>' : '';
+  return '<div class="card"><div class="card-h"><h3>Órdenes de pago</h3><span class="meta">Una fila por OG pagada. Filtrá por columna con la flechita ▾. El total se recalcula con lo filtrado.</span>'+limpiar+'</div>'
+    +'<table class="grid" style="font-size:12.5px"><thead><tr>'+th('OP N°')+th('Fecha')+th('OG')+th('Prov.','prov')+th('Clasif.','clasif')+th('SOLP','solp')+th('Comprador','comprador')+th('Medio','medio')+th('Caja','caja')+'<th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
 }
 
 function colaView(cola){
