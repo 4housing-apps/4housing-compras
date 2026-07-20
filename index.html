@@ -1696,6 +1696,8 @@ function parseNum(s){ s=String(s==null?'':s).trim(); if(s==='') return null; s=s
 function fmtNum(v,dec){ return (v==null||v==='')?'':(+v||0).toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
 window.parseNum=parseNum; window.fmtNum=fmtNum;
 function ogTotal(og){ return (og.items&&og.items.length) ? og.items.reduce((a,it)=>a+itemTotal(it),0) : (+og.monto_total||0); }
+function ogComprometido(og){ return og.cerrada ? ogAcumMonto(og) : ogTotal(og); }  // OG cerrada: comprometido = solo lo certificado (el saldo no certificado se da de baja)
+window.ogComprometido=ogComprometido;
 function certMonto(c, og){
   if(og.items&&og.items.length){ const av=c.avances||{}; return og.items.reduce((a,it,idx)=>a+itemTotal(it)*((+av[idx]||0)/100),0); }
   return (+c.pct||0)/100*(+og.monto_total||0);
@@ -1859,7 +1861,7 @@ function comprasResumenView(ogsAll){
   const pf=v=>v.toFixed(1).replace('.0','')+'%';
   const rows=ogs.map(o=>{
     const mon=ogMonedaCode(o); const tc=(o.tc_pesos!=null&&o.tc_pesos!=='')?+o.tc_pesos:null;
-    const total=ogTotal(o), cert=ogAcumMonto(o), lib=ogLiberado(o), pag=ogPagado(o);
+    const total=ogComprometido(o), cert=ogAcumMonto(o), lib=ogLiberado(o), pag=ogPagado(o);
     const noCert=Math.max(0,total-cert), certNoLib=Math.max(0,cert-lib), libNoPag=Math.max(0,lib-pag);
     const p=x=>total?x/total*100:0;
     let tARS,tUSD;
@@ -1939,7 +1941,7 @@ async function renderCompras(){
   let ogs=ogsAll.filter(ogxPass);
 
   const acc={ARS:{comp:0,cert:0,lib:0,pag:0}, USD:{comp:0,cert:0,lib:0,pag:0}};
-  ogs.forEach(o=>{ const m=ogMonedaCode(o); acc[m].comp+=ogTotal(o); acc[m].cert+=ogAcumMonto(o); acc[m].lib+=ogLiberado(o); acc[m].pag+=ogPagado(o); });
+  ogs.forEach(o=>{ const m=ogMonedaCode(o); acc[m].comp+=ogComprometido(o); acc[m].cert+=ogAcumMonto(o); acc[m].lib+=ogLiberado(o); acc[m].pag+=ogPagado(o); });
   const kf=x=>(+x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
   const dual=(ars,usd)=>'<div style="font-size:20px;line-height:1.3">$ '+kf(ars)+'</div><div style="font-size:20px;line-height:1.3;color:var(--olive-deep)">US$ '+kf(usd)+'</div>';
   const K=(l,v,s)=>'<div class="kpi"><div class="kpi-label">'+l+'</div><div class="kpi-value" style="font-size:inherit">'+v+'</div><div class="kpi-sub">'+esc(s||'')+'</div></div>';
