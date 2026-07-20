@@ -682,15 +682,16 @@ const Data = {
 let current='compras';
 
 /* ===== ROLES ===== */
-let ROLE={comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true};
+let ROLE={comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, finanzas:true};
 let DEMO_ROLE='admin';
 const DEMO_ROLES={
-  admin:{comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, lbl:'Admin (todo)'},
-  comprador:{comprador:true, certificador:false, tesorero:false, confidencial:false, admin:false, lbl:'Comprador'},
-  certificador:{comprador:false, certificador:true, tesorero:false, confidencial:false, admin:false, lbl:'Certificador (técnica)'},
-  tesorero:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, lbl:'Tesorero'},
+  admin:{comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, finanzas:true, lbl:'Admin (todo)'},
+  comprador:{comprador:true, certificador:false, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Comprador'},
+  certificador:{comprador:false, certificador:true, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Certificador (técnica)'},
+  tesorero:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:false, lbl:'Tesorero'},
+  finanzas:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:true, lbl:'Finanzas'},
 };
-function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={comprador:r.comprador, certificador:r.certificador, tesorero:r.tesorero, confidencial:r.confidencial, admin:r.admin}; }
+function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={comprador:r.comprador, certificador:r.certificador, tesorero:r.tesorero, confidencial:r.confidencial, admin:r.admin, finanzas:!!r.finanzas}; }
 async function loadRole(){
   if(DEMO_MODE){ applyDemoRole(); return; }
   ROLE={comprador:false, certificador:false, tesorero:false, confidencial:false, admin:false};   // por defecto, sin permisos
@@ -699,12 +700,14 @@ async function loadRole(){
     if(!email) return;
     const rows=await sbFetch('/usuarios_autorizados?select=*&email=eq.'+encodeURIComponent(email));
     const u=rows&&rows[0];
-    if(u) ROLE={comprador:!!u.es_comprador, certificador:!!u.es_certificador, tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial, admin:!!u.es_admin};
+    if(u) ROLE={comprador:!!u.es_comprador, certificador:!!u.es_certificador, tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial, admin:!!u.es_admin, finanzas:!!u.es_finanzas};
   }catch(e){ /* si falla, queda sin permisos */ }
 }
 function canEditOG(){ return ROLE.comprador||ROLE.admin; }
 function canCert(){ return ROLE.certificador||ROLE.admin; }
 function canPago(){ return ROLE.tesorero||ROLE.admin; }
+function canFinanzas(){ return ROLE.finanzas||ROLE.admin; }
+window.canFinanzas=canFinanzas;
 function setDemoRole(v){ DEMO_ROLE=v; applyDemoRole(); buildNav(); go((current==='tesoreria' && !ROLE.tesorero)?'compras':current); }
 window.setDemoRole=setDemoRole;
 
@@ -1645,8 +1648,10 @@ const CLASIF_RENGLON=[{"codigo": "ESTRUC", "desc": "ESTRUCTURA"}, {"codigo": "PR
 const COSTEO_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CERTIFICACION", "CLIMATIZACION", "COCINA", "CONSUMIBLES", "DESVIO", "EQUIPAMIENTO", "EST MODULAR", "ESTRUCTURA", "GC AISLACION", "GC AMOBLAMIENTO", "GC AREN Y PINTU", "GC ARENADO  Y PINTURA", "GC ART SANITARIOS", "GC ART. ILUMINA", "GC ART. ILUMINACION", "GC ASERRADERO", "GC CARPINTERIA", "GC CHAPA", "GC CORRALON", "GC ELECTRODOMES", "GC EQUIPAMIENTO", "GC ESTR MODULAR", "GC ESTRUCT MODULAR", "GC HERRAJES", "GC HERRERIA", "GC HIERROS", "GC HONORARIOS", "GC INS ELECTRIC", "GC INS GAS", "GC INS SANITARI", "GC INS TERMOMEC", "GC INST ELECTRICA", "GC INST GAS", "GC INST SANITARIA", "GC INST TERMOMECANICA", "GC LOGISTICA", "GC MONTAJE", "GC OBRA CIVIL", "GC OBRA SECA", "GC PANELES", "GC PISO", "GC POSVENTA", "GC REVESTIMIENT", "GC REVESTIMIENTO", "GC SANITARIOS", "GC SERVICIOS", "GC VIDRIO Y ESP", "GC VIDRIOS Y ESPEJOS", "INFRAESTRUCTURA", "LOGIST PERSONAL", "LOGISTICA", "LOGISTICA INTER", "MO EQUIPAMIENTO", "MO INST ELECTRI", "MO OBRA CIVIL", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "POLIZA SEGURO", "POST VENTA", "SANITARIO"];
 const ESTRUCTURA_OPC=["ACOPIO", "ALQ CONT 3ROS", "ALQUILERES", "BIENES DE USO", "COTO", "ENERG ELECT", "FOOD&BEV", "GASOIL", "GASTOS DTM", "GC MANTENIMIENT", "GS LIMPIEZA", "GS VAR OFICINA", "GS VAR TALLER", "GTO COMERCIAL", "GTO PUBLICIDAD", "GTOS BANCARIOS", "GTOS MANT MODUL", "GTOS MANT REEFE", "GTOS TRANSP ALQ", "HERRAMIENTAS", "HONOR CONTABLES", "HONOR ESCRIBANO", "HONOR LEGALES", "HONOR OTROS", "INVERSION", "LIBRERIA", "LICENCIAS", "MANTEN BS USO", "MEDIC LAB PREP", "MENSAJERIA", "MOVILIDAD COMBU", "MUEBLES Y UTILE", "PATENTES", "PEAJES", "PROVEEDORES", "RECOL RESIDUOS", "REMISES", "RODADOS", "RRHH", "SEGURIDAD ALARM", "SEGUROS", "SISTEMAS", "STOCK NQN", "TELEFONO"];
 const POSTVENTA_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CLIMATIZACION", "CUBIERTA", "DESVIO", "ELECTRICIDAD", "EQUIPAMIENTO", "ESTRUCTURA", "HERRERIA", "INST ELECTRICA", "LOGIST PERSONAL", "LOGISTICA", "MAT OBRA CIVIL", "MO INST CLIMATI", "MO INST ELECTRI", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "PISO", "POST VENTA", "SANITARIO"];
-const CONDICION_OPC=["CON ANTICIPO", "CONTADO ARS", "CONTADO USD", "TRANSFERENCIA", "COMPENSACIÓN CLIENTE", "COMPENSACIÓN PROVEEDORES", "VER OBSERVACIONES"];
-const COND_SIN_CAJA=["COMPENSACIÓN CLIENTE","COMPENSACIÓN PROVEEDORES"];  // no mueven caja
+const CONDICION_OPC=["CON ANTICIPO", "CONTADO ARS", "CONTADO USD", "TRANSFERENCIA", "TARJETA VISA GALICIA", "TARJETA VISA BBVA", "TARJETA VISA MACRO", "TARJETA VISA PROVINCIA", "TARJETA AMEX", "COMPENSACIÓN CLIENTE", "COMPENSACIÓN PROVEEDORES", "VER OBSERVACIONES"];
+const COND_SIN_CAJA=["TRANSFERENCIA","TARJETA VISA GALICIA","TARJETA VISA BBVA","TARJETA VISA MACRO","TARJETA VISA PROVINCIA","TARJETA AMEX","COMPENSACIÓN CLIENTE","COMPENSACIÓN PROVEEDORES"];  // no salen de CAJA PESOS 2 / DOLARES 3
+const TARJETA_CTA={"TARJETA VISA GALICIA":"21210001","TARJETA VISA BBVA":"21210003","TARJETA VISA MACRO":"21210004","TARJETA VISA PROVINCIA":"21210005","TARJETA AMEX":"21210002"};
+
 const DESVIO_OPC=["Atraso que afecta obra", "Decision comercial", "Error computo costeo", "Error especificación técnica", "Error unidad de medida", "Material dañado", "No presupuestado", "Otros"];
 const MONEDA_OPC=["Corriente","Extranjera"];
 const MODULOS_OPC=["A00001 - GENERICO MODULO", "A00002 - GENERICO REEFER", "A00003 - STOCK BS AS", "A00004 - STOCK NQN", "A00005 - NO APLICA", "A00006 - MODULOS DE 3ROS", "A00007 - IF4346 RE BUILDING TRAILERS", "M00001 - AMBU 200804-1", "M00002 - AMFU 845146-8", "M00003 - AMFU 848078-5", "M00004 - AMFU 849125-0", "M00005 - AMFU 850929-8", "M00006 - AMFU 852102-0", "M00007 - AMFU 884514-2", "M00008 - AMFU 885809-4", "M00009 - AMFU 889877-5", "M00010 - AMZU 838073-9", "M00011 - AWSU 494620-1", "M00012 - CBHU 146645-9", "M00013 - CLHU 442667-6", "M00014 - CLHU 828379-0", "M00015 - CLHU 834894-6", "M00016 - CLHU 859573-5", "M00017 - CLHU 869604-7", "M00018 - CLHU 875113-9", "M00019 - CLHU 340475-4", "M00020 - CLHU812930-0", "M00021 - CLPU 341432-8", "M00022 - CLPU 341576-7", "M00023 - CLPU 350111-9", "M00024 - CMCU 552873-7", "M00025 - CMCU 553481-1", "M00026 - CRXU 174134-6", "M00027 - CSVU 209922-0", "M00028 - DFSU 600893-3", "M00029 - DVRU 134882-1", "M00030 - EMCU 108083-6", "M00031 - EMCU 237708-0", "M00032 - EMCU 247309-9", "M00033 - EMCU 919510-6", "M00034 - FBLU 411323-0", "M00035 - FSCU 402701-4", "M00036 - FSCU 561616-9", "M00037 - FSCU 562329-7", "M00038 - FSCU 644044-9", "M00039 - GATU 060957-3", "M00040 - GATU 076860-0", "M00041 - GATU 804726-1", "M00042 - GSTU 464773-1", "M00043 - GSTU 718552-9", "M00044 - GVCU 510828-0", "M00045 - GVCU 510883-9", "M00046 - GVCU 511941-1", "M00047 - GVCU 521289-0", "M00048 - GVCU 537884-0", "M00049 - HJCU 801916-0", "M00050 - HJCU 812283-6", "M00051 - IF 00000-40", "M00052 - IF 00000-41", "M00053 - IF 00000-42", "M00054 - IF 00000-43", "M00055 - IF 02307-0", "M00056 - IF 02996-1", "M00057 - IF 03003-0", "M00058 - IF 03004-1", "M00059 - IF 03004-5", "M00060 - IF 03061-2", "M00061 - IF 16140-1", "M00062 - INKU 250829-2", "M00063 - INKU 255832-8", "M00064 - INKU 258118-5", "M00065 - ITLU 674480-1", "M00066 - ITLU 821192-1", "M00067 - KLFU 137555-4", "M00068 - LTIU 800345-3", "M00069 - MMMU 410379-0", "M00070 - MSCU 237012-4", "M00071 - MSCU 284871-7", "M00072 - MSCU 329179-7", "M00073 - NEXU 953865-0", "M00074 - NEXU 953981-0", "M00075 - NEXU 954409-8", "M00076 - NOSU 441600-3", "M00077 - NSSC 824416-4", "M00078 - OCCU 40051-5", "M00079 - PCIU 378956-7", "M00080 - PCIU 391655-3", "M00081 - POCU 020418-2", "M00082 - PROTOTIPO", "M00083 - RODA", "M00084 - SARU 001465-1", "M00085 - SUDU 400485-2", "M00086 - SUDU 475050-6", "M00087 - SUDU 475297-8", "M00088 - SUDU 475619-2", "M00089 - SUDU 475716-2", "M00090 - TCKU 934530-2", "M00091 - TCKU 982419-9", "M00092 - TCNU 911341-0", "M00093 - TEXU 204930-7", "M00094 - TEXU 216368-6", "M00095 - TEXU 461265-7", "M00096 - TEXU 484852-9", "M00097 - TEXU 536270-0", "M00098 - TEXU 545777-1", "M00099 - TEXU 556166-2", "M00100 - TEXU 557039-2", "M00101 - TEXU 711037-5", "M00102 - TGHU 419659-0", "M00103 - TGHU 723264-3", "M00104 - TGHU 743569-8", "M00105 - TGHU 747181-7", "M00106 - TGHU 749069-5", "M00107 - TGHU 749671-2", "M00108 - TGHU 755237-5", "M00109 - TGHU 769357-9", "M00110 - TGHU 771934-9", "M00111 - TGHU 948005-8", "M00112 - TGHU 948136-8", "M00113 - TPHU 818736-2", "M00114 - TRIU 596103-0", "M00115 - TRIU 845278-2", "M00116 - TRLU 177537-1", "M00117 - TRLU 196515-5", "M00118 - TRLU 556170-0", "M00119 - TRLU 176809-5", "M00120 - TTNU 321869-5", "M00121 - TTNU 344858-0", "M00122 - TTNU 384524-7", "M00123 - TTNU 477512-3", "M00124 - TTNU 520299-6", "M00125 - TTNU 902965-7", "M00126 - TTNU 943314-4", "M00127 - UESU 470272-3", "M00128 - UESU 501696-5", "M00129 - UESU 517352-1", "M00130 - UETU 500557-9", "M00131 - UETU 500691-3", "M00132 - UGMU 863798-9", "M00133 - WFHU 130895-4", "M00134 - XINU 824048-3", "M00135 - XINU 824054-4", "M00136 - XINU 824097-1", "M00137 - XINU 824110-8", "M00138 - AMFU 890167-3", "M00141 - TRHU 141133-0", "M00142 - TRHU 207304-7", "M00143 - TRHU 184412-9", "M00144 - TRHU 151702-3", "M00145 - TRHU 207226-7", "M00146 - TRHU 207287-9", "M00147 - FT 22114-3", "M00148 - UNDU 101771-0", "M00149 - UNDU 203044-5", "M00151 - IF 04252-1", "M00152 - IF 04252-2", "M00153 - IF 04252-3", "M00154 - IF 04252-4", "M00155 - IF 04252-5", "M00156 - IF 04252-6", "M00157 - IF 04252-7", "M00158 - IF 04252-8", "M00159 - IF 04252-9", "M00160 - IF 04252-10", "M00161 - IF 04252-11", "M00162 - IF 04252-12", "M00163 - IF 04252-13", "M00164 - IF 04252-14", "M00165 - IF 04252-15", "M00166 - IF 04252-16", "M00167 - MNBU 011045-0", "M00168 - WSCU 602190-1", "M00169 - PONU 059786-4", "M00170 - EISU 912965-8", "MODULO - GENERICO MODULO", "NA - NO APLICA", "P00001 - AMFU887623-0", "P00002 - CLHU 406068-0", "P00003 - GLDU 771502-8", "P00004 - GSTU 722789-8", "P00005 - GSTU 968936-5", "P00006 - HKX 000220-0", "P00007 - ICSU 700422-5", "P00008 - IEAU 282811-1", "P00009 - INKU 254076-1", "P00010 - INKU 256089-7", "P00011 - INKU 256944-6", "P00012 - INKU251793-0", "P00013 - ITLU 557307-3", "P00014 - KKFU 701287-1", "P00015 - MLCU 2957588-1", "P00016 - MLCU 2957588-2", "P00017 - MLCU 2957588-3", "P00018 - TGHU 419140-6", "P00019 - TGHU 424684-9", "P00020 - NYKU 360511-8", "P00021 - NYKU 358510-9", "P00022 - NYKU 355565-5", "P00023 - CAIU 271739-5", "P00024 - CAIU 302295-7", "P00025 - CAIU 307304-4", "P00026 - DFSU 680419-1", "P00027 - DFSU 665127-7", "R00001 - CMCU 520124-0", "R00002 - CMCU 520233-4", "R00003 - CMCU 553408-8", "R00004 - CRLU 110562-4", "R00005 - CRLU 516922-6", "R00006 - CRLU 517162-4", "R00007 - CRLU 517322-6", "R00008 - CRLU 517439-3", "R00009 - FSCU 560197-6", "R00010 - FSCU 560476-4", "R00011 - FSCU 561678-6", "R00012 - FSCU 561794-6", "R00013 - FSCU 562088-9", "R00014 - FSCU 562136-0", "R00015 - FSCU 591997-5", "R00016 - HLXU 475603-0", "R00017 - KRJU 740009-5", "R00018 - KRJU 740026-4", "R00019 - KRJU 740042-8", "R00020 - SCXU 492781-3", "R00021 - SUDU 100133-5", "R00022 - SUDU 100215-7", "R00023 - SUDU 100223-9", "R00024 - SUDU 100307-1", "R00025 - SUDU 100359-6", "R00026 - SUDU 475063-5", "R00027 - SUDU 475084-6", "R00028 - SUDU 475098-0", "R00029 - SUDU 475207-3", "R00030 - SUDU 475225-8", "R00031 - SUDU 475258-2", "R00032 - SUDU 475293-6", "R00033 - SUDU 475294-1", "R00034 - SUDU 475315-1", "R00035 - SUDU 475328-0", "R00036 - SUDU 475338-3", "R00037 - SUDU 475354-7", "R00038 - SUDU 475385-0", "R00039 - SUDU 475406-0", "R00040 - SUDU 475417-9", "R00041 - SUDU 475456-4", "R00042 - SUDU 475459-0", "R00043 - SUDU 475587-4", "R00044 - SUDU 475651-0", "R00045 - SUDU 475675-7", "R00046 - SUDU 475694-7", "R00047 - SUDU 475705-4", "R00048 - SUDU 475712-0", "R00049 - SUDU 477266-0", "R00050 - SUDU 477340-9", "R00051 - SUDU 477377-5", "R00052 - TOLU 780207-8", "R00053 - TOLU 780208-3", "R00054 - TRIU 870913-0", "R00055 - TRLU 177425-1", "R00056 - TRLU 179018-6", "R00057 - TRLU 183160-2", "R00058 - TRLU 195790-4", "R00059 - TRLU 196440-0", "R00060 - TRLU 196821-5", "R00061 - TRLU 177605-9", "R00062 - SUDU 475659-3", "R00063 - APRU 509146-3", "R00064 - CCLU 859085-7", "R00065 - CCLU 859664-4", "R00066 - CCLU 860036-4", "R00067 - CCLU 860494-5", "R00068 - CGMU 496309-0", "R00069 - CGMU 496644-3", "R00070 - CMCU 552873-7", "R00071 - CCLU 859016-3", "R00072 - CCLU 861801-8", "R00073 - CCLU 860139-7", "R00074 - CCLU 861134-4", "R00075 - CCLU 859634-6", "R00076 - GESU 934278-1", "R00077 - APRU 508913-1", "R00078 - CCLU 861137-4", "R00079 - CCLU 859141-0", "R00080 - GESU 943030-5", "R00081 - CCLU 859877-6", "R00082 - CMCU 555204-0", "R00083 - MWCU 667899-0", "R00084 - CCLU 859721-3", "R00085 - CCLU 859485-2", "R00086 - CRLU 726949-8", "R00087 - SUDU 622958-6", "R00088 - MWCU 667906-5", "R00089 - MNBU 011835-8", "R00090 - TTNU 848144-6", "R00091 - MORU 581522-0", "R00092 - MNBU 011045-0", "R00093 - ZCSU 511065-4", "R00094 - ZCSU 585058-4", "R00095 - SZLU 909824-6", "R00096 - SZLU 911758-3", "R00097 - CXRU 118045-3", "R00098 - CXRU 118055-6", "R00099 - CRLU 310947-0", "S00001 - IF 04185-16", "S00002 - IF 04185-4", "S00003 - IF 04185-1", "V00001 - PL0050 CALLAO", "V00002 - PL0072 MELIQUINA", "V00003 - PL0075 ROCAS NEGRAS"];
@@ -2171,10 +2176,14 @@ function renderTesoreria(){
     +'<button class="mtab'+(tab==='proy'?' active':'')+'" onclick="setTesTab(\'proy\')">Proyectado</button>'
     +'<button class="mtab'+(tab==='cola'?' active':'')+'" onclick="setTesTab(\'cola\')">Cola de pagos</button>'
     +'<button class="mtab'+(tab==='op'?' active':'')+'" onclick="setTesTab(\'op\')">Órdenes de pago</button>'
+    +'<button class="mtab'+(tab==='transf'?' active':'')+'" onclick="setTesTab(\'transf\')">Transferencias</button>'
+    +'<button class="mtab'+(tab==='tarj'?' active':'')+'" onclick="setTesTab(\'tarj\')">Tarjetas</button>'
     +'<button class="mtab'+(tab==='arqueo'?' active':'')+'" onclick="setTesTab(\'arqueo\')">Arqueo de caja</button></div>';
   let body;
   if(tab==='arqueo') body=arqueoView();
   else if(tab==='op') body=opsView();
+  else if(tab==='transf') body=transfView();
+  else if(tab==='tarj') body=tarjView();
   else if(tab==='proy') body=proyectadoView();
   else body=colaView(cola);
   const roleNote='<div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">Sección de <strong>Tesorería</strong>. En producción se restringe al rol tesorero (Azure + Supabase); acá se ve en demo.</div>';
@@ -2332,18 +2341,19 @@ function opsView(){
       +'<td style="font-size:11px">'+esc(caja)+'</td>'
       +'<td style="text-align:right">'+(tc?fmtNum(tc,2):'—')+'</td>'
       +'<td style="text-align:right">'+(mUSD!=null?'US$ '+fmt2(mUSD):'—')+'</td>'
-      +'<td style="text-align:right"><strong>'+(mARS!=null?'$ '+fmt2(mARS):'—')+'</strong></td></tr>';
-  }).join('') || '<tr><td colspan="12" style="color:var(--muted);padding:14px">Ningún pago coincide con los filtros.</td></tr>';
+      +'<td style="text-align:right"><strong>'+(mARS!=null?'$ '+fmt2(mARS):'—')+'</strong></td>'
+      +'<td style="text-align:center">'+(COND_SIN_CAJA.includes(o.condicion)?'<span style="color:var(--muted);font-size:11px">Finanzas</span>':'<button class="btn ghost sm" onclick="exportAsientoTangoOP('+p.id+')">Asiento</button>')+'</td></tr>';
+  }).join('') || '<tr><td colspan="13" style="color:var(--muted);padding:14px">Ningún pago coincide con los filtros.</td></tr>';
   const foot='<tr style="border-top:2px solid var(--line-strong);font-weight:700"><td colspan="10" style="text-align:right">Total mostrado</td>'
     +'<td style="text-align:right">'+(totUSD?'US$ '+fmt2(totUSD):'—')+'</td>'
-    +'<td style="text-align:right">'+(totARS?'$ '+fmt2(totARS):'—')+'</td></tr>';
+    +'<td style="text-align:right">'+(totARS?'$ '+fmt2(totARS):'—')+'</td><td></td></tr>';
   const th=(label,col)=>{ if(!col) return '<th style="white-space:nowrap">'+label+'</th>';
     const opener= col==='fecha' ? 'openOpFechaFilter(event)' : ("openOpFilter('"+col+"',event)");
     return '<th style="white-space:nowrap">'+label+' <button class="opfbtn" onclick="'+opener+'" title="Filtrar" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:11px;color:'+(opFilterActive(col)?'var(--olive-deep)':'var(--muted)')+'">▾</button></th>'; };
   const hayFiltro=Object.keys(OP_FILTRO).some(c=>opFilterActive(c))||opFilterActive('fecha');
   const limpiar = hayFiltro ? '<button class="btn ghost sm" style="margin-left:auto" onclick="opFilterClearAll()">Limpiar filtros</button>' : '';
   return '<div class="card"><div class="card-h"><h3>Órdenes de pago</h3><span class="meta">Una fila por OG pagada. Filtrá por columna con la flechita ▾. El total se recalcula con lo filtrado.</span>'+limpiar+'</div>'
-    +'<table class="grid" style="font-size:12.5px"><thead><tr>'+th('OP N°','op')+th('Fecha','fecha')+th('OG','og')+th('Prov.','prov')+th('Clasif.','clasif')+th('SOLP','solp')+th('Comprador','comprador')+th('Medio','medio')+th('Caja','caja')+'<th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
+    +'<table class="grid" style="font-size:12.5px"><thead><tr>'+th('OP N°','op')+th('Fecha','fecha')+th('OG','og')+th('Prov.','prov')+th('Clasif.','clasif')+th('SOLP','solp')+th('Comprador','comprador')+th('Medio','medio')+th('Caja','caja')+'<th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th><th style="text-align:center">Asiento</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
 }
 
 function colaView(cola){
@@ -2499,6 +2509,108 @@ function exportAsientoTango(ogId){
   toast('Asiento (formato Tango) generado');
 }
 window.asientoTangoSheets=asientoTangoSheets; window.exportAsientoTango=exportAsientoTango;
+
+/* ===== ASIENTO POR ORDEN DE PAGO (OP) — un asiento por pago =====
+   Reglas D confirmadas por Micaela:
+   - importe = lo pagado en esa OP (prorrateado al % del pago)
+   - moneda del asiento = la del pago; gasto (Debe) al TC del pago
+   - contrapartida (Haber) = caja del pago (CAJA PESOS 2 / DOLARES 3)
+   - tarjeta/transferencia NO generan asiento (los registra Finanzas en Tango) */
+function asientoTangoSheetsOP(pagos){
+  const cabH=['Identificador','Fecha de asiento','Clase de asiento','Código de tipo de asiento','Estado','Código de moneda','Concepto','Observaciones','SOLP','OG','BONOS','Eliminar','ROW_VERSION'];
+  const renH=['Identificador','Nro.','Código de cuenta','Debe','Haber','Fecha de origen','Leyenda','Importe de la unidad adicional','Cantidad','Eliminar','ROW_VERSION'];
+  const cotH=['Identificador','Código de moneda','Código de tipo de cotización','Cotización','Eliminar','ROW_VERSION'];
+  const auxH=['Identificador','Nro. renglón','Código tipo auxiliar','Tipo auxiliar','Código auxiliar','Descripción auxiliar','Porcentaje','Importe','Leyenda'];
+  const cab=[cabH], ren=[renH], cot=[cotH], aux=[auxH];
+  pagos.forEach(p=>{
+    const o=ogById(p.og_id); if(!o) return;
+    const factor=(+p.pct||0)/100;
+    const monPago=p.moneda_pago==='USD'?'USD':'ARS';
+    const monCode=monPago==='USD'?'DOL':'PES';
+    const monOG=ogMonedaCode(o); const tc=+p.tc||0;
+    const id=(p.op_numero!=null?('OP'+p.op_numero):('OP_'+p.id));
+    let fecha=p.fecha||''; try{ if(/^\d{4}-\d{2}-\d{2}/.test(p.fecha)) fecha=new Date(p.fecha+'T00:00:00'); }catch(e){}
+    const conv=(v)=>{ if(monOG===monPago) return v; if(monOG==='USD'&&monPago==='ARS') return v*tc; if(monOG==='ARS'&&monPago==='USD') return tc? v/tc:0; return v; };
+    const pctTxt = factor>=0.999?'total':(Math.round(factor*100)+'%');
+    const concepto='OP '+(p.op_numero||'')+' - pago '+pctTxt+' OG '+(o.numero||'')+' - '+(o.proveedor||o.objeto||'');
+    cab.push([id, fecha, ASIENTO_CLASE, ASIENTO_TIPO_CN, ASIENTO_ESTADO_DEF, monCode, concepto, (p.observaciones||''), (o.solp!=null?o.solp:''), (o.numero||''), '', 'No', '']);
+    let nro=0, totDebe=0;
+    (o.items||[]).forEach(it=>{
+      const im=imputacion(it);
+      const imp=+conv(itemTotal(it)*factor).toFixed(2);
+      if(!imp) return;
+      nro++; totDebe+=imp;
+      const leyenda=(o.proveedor_cod||'')+' - '+(im.cuenta||it.articulo||o.objeto||'');
+      ren.push([id, nro, im.cuenta_cod||'', imp, '', fecha, leyenda, '', '', 'No', '']);
+      if(im.eerr){ const c=EERR_COD[im.eerr]||''; aux.push([id,nro,'02','EERR',c,im.eerr,100,imp,leyenda]); }
+      if(im.aux03){ aux.push([id,nro,'03','INSTRUCTIVO DE FABRICACION',im.aux03,auxDescLookup('3',im.aux03),100,imp,leyenda]); }
+      if(im.aux04){ const mods=String(im.aux04).split(' | ').map(s=>s.trim()).filter(Boolean); const n=mods.length;
+        if(n){ const base=Math.floor(imp/n*100)/100, pbase=Math.floor(100/n*100)/100;
+          mods.forEach((m,i)=>{ const last=(i===n-1); const impi=last?+(imp-base*(n-1)).toFixed(2):base, pi=last?+(100-pbase*(n-1)).toFixed(2):pbase;
+            aux.push([id,nro,'04','CONTENEDOR/MODULO',m,auxDescLookup('4',m),pi,impi,leyenda]); }); } }
+      if(im.aux05){ aux.push([id,nro,'05','MANTENIMIENTO BS DE USO',im.aux05,auxDescLookup('5',im.aux05),100,imp,leyenda]); }
+      if(im.aux06){ aux.push([id,nro,'06','MUEBLES Y UTILES',im.aux06,auxDescLookup('6',im.aux06),100,imp,leyenda]); }
+      if(im.aux07){ aux.push([id,nro,'07','HERRAMIENTAS',im.aux07,auxDescLookup('7',im.aux07),100,imp,leyenda]); }
+      if(im.aux08){ aux.push([id,nro,'08','RODADOS',im.aux08,auxDescLookup('8',im.aux08),100,imp,leyenda]); }
+    });
+    const caja=CAJAS[monPago]||CAJAS.ARS;
+    nro++;
+    ren.push([id, nro, caja.cod, '', +totDebe.toFixed(2), fecha, caja.nombre+' - OP '+(p.op_numero||''), '', '', 'No', '']);
+    if(monCode==='DOL' && tc){ cot.push([id,'DOL','COTIZACIÓN',tc,'No','']); }
+  });
+  return {cab,ren,cot,aux};
+}
+function exportAsientoTangoOP(pagoId){
+  if(typeof XLSX==='undefined'){ toast('Necesitás conexión para exportar.'); return; }
+  const p=(mem.pagos||[]).find(x=>String(x.id)===String(pagoId)); if(!p){ toast('No encontré la OP.'); return; }
+  const o=ogById(p.og_id)||{};
+  if(COND_SIN_CAJA.includes(o.condicion)){ toast('Condición "'+(o.condicion||'')+'": la registra Finanzas en Tango, no genera asiento acá.'); return; }
+  const s=asientoTangoSheetsOP([p]);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.cab), 'Asientos contables');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.ren), 'Renglones');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.cot), 'Cotizaciones');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.aux), 'Auxiliares');
+  XLSX.writeFile(wb, 'Asiento_Tango_OP_'+(p.op_numero||p.id)+'.xlsx');
+  toast('Asiento de la OP generado');
+}
+window.exportAsientoTangoOP=exportAsientoTangoOP; window.asientoTangoSheetsOP=asientoTangoSheetsOP;
+
+/* ===== Solapas de resumen: Transferencias / Tarjetas (constancia + N° asiento de Finanzas) ===== */
+function pagoMontoUSDARS(p){ const mon=p.moneda_pago; const imp=+p.importe_pago||0; const tc=+p.tc||0; let mUSD=null,mARS=null; if(mon==='USD'){mUSD=imp;mARS=tc?imp*tc:null;}else{mARS=imp;mUSD=tc?imp/tc:null;} return {mUSD,mARS}; }
+function finInput(p,field,ph){ const dis=canFinanzas()?'':' disabled'; return '<input value="'+esc(p[field]||'')+'" placeholder="'+esc(ph)+'"'+dis+' onchange="setPagoField('+p.id+',\''+field+'\',this.value)" style="border:1px solid var(--line-strong);border-radius:7px;padding:4px 6px;font-size:11px;width:100%;box-sizing:border-box">'; }
+function resumenPagos(cond_match, tipoTxt, esTarj){
+  let pagos=(mem.pagos||[]).filter(p=>{ const o=ogById(p.og_id)||{}; return cond_match(String(o.condicion||'')); });
+  if(!pagos.length) return '<div class="card"><div class="empty">No hay pagos '+tipoTxt+' registrados.</div></div>';
+  pagos.sort((a,b)=>((+a.op_numero||1e9)-(+b.op_numero||1e9)));
+  const fmt2=x=>(+x||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const rows=pagos.map(p=>{
+    const o=ogById(p.og_id)||{}; const m=pagoMontoUSDARS(p);
+    return '<tr><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
+      +'<td>'+fmtDate(p.fecha)+'</td><td>OG '+esc(p.numero||'—')+'</td>'
+      +'<td style="font-size:11px">'+esc(o.proveedor_cod||'')+'</td>'
+      +'<td>'+esc(o.clasif_og||'')+'</td>'
+      +'<td style="font-size:11px">'+esc(o.comprador||'')+'</td>'
+      +(esTarj?'<td style="font-size:11px">'+esc(o.condicion||'')+'</td>':'<td>'+finInput(p,'banco_transf','banco...')+'</td>')
+      +'<td style="text-align:right">'+(m.mUSD!=null?'US$ '+fmt2(m.mUSD):'—')+'</td>'
+      +'<td style="text-align:right"><strong>'+(m.mARS!=null?'$ '+fmt2(m.mARS):'—')+'</strong></td>'
+      +'<td>'+finInput(p,'nro_asiento','GVS / SER...')+'</td></tr>';
+  }).join('');
+  const finNote = canFinanzas()?'':'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Solo Finanzas puede editar '+(esTarj?'':'Banco y ')+'N° de asiento.</div>';
+  const colB = esTarj?'Tarjeta':'Banco';
+  return '<div class="card"><div class="card-h"><h3>Pagos '+tipoTxt+'</h3><span class="meta">No generan asiento acá: los registra Finanzas en Tango. Cargá el N° de comprobante como constancia.</span></div>'+finNote
+    +'<table class="grid" style="font-size:12.5px"><thead><tr><th>OP N°</th><th>Fecha</th><th>OG</th><th>Prov.</th><th>Clasif.</th><th>Comprador</th><th>'+colB+'</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th><th>N° asiento</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function transfView(){ return resumenPagos(c=>c==='TRANSFERENCIA','por transferencia',false); }
+function tarjView(){ return resumenPagos(c=>c.indexOf('TARJETA')===0,'con tarjeta',true); }
+window.transfView=transfView; window.tarjView=tarjView;
+async function setPagoField(id,field,val){
+  if(!canFinanzas()){ toast('Solo Finanzas puede editar esto.'); return; }
+  const p=(mem.pagos||[]).find(x=>String(x.id)===String(id)); if(!p) return;
+  p[field]=val;
+  if(!DEMO_MODE){ try{ await sbFetch('/pagos?id=eq.'+id,{method:'PATCH',body:JSON.stringify({[field]:val})}); }catch(e){ toast('No se pudo guardar: '+(e&&e.message?e.message:e)); } }
+}
+window.setPagoField=setPagoField;
 
 function openPago(ogId){
   const o=ogById(ogId); const monOG=ogMonedaCode(o);
