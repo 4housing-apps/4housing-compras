@@ -2874,7 +2874,9 @@ function openOG(id){
   const optSelNA=(arr,val)=>{ const v=val||'No Aplica'; return '<option'+(v==='No Aplica'?' selected':'')+'>No Aplica</option>'+arr.map(x=>'<option'+(x===v?' selected':'')+'>'+esc(x)+'</option>').join(''); };
   const provDL=(typeof DIC!=='undefined'?DIC.proveedores:[]).map(v=>'<option value="'+esc(v.codigo+' — '+(v.razon||v.comercial))+'"></option>').join('');
   const provVal = cur.proveedor_cod ? (cur.proveedor_cod+' — '+(cur.proveedor||'')) : '';
-  const certOpts=optSel(nombresCert(),cur.certificador);
+  const compActual = canAdmin() ? null : (cur.comprador||whoNombre());
+  const certList = nombresCert().filter(n=> canAdmin() || n!==compActual);
+  const certOpts=optSel(certList,cur.certificador);
   const compOpts=optSel(nombresComp(),cur.comprador);
   const compField = canAdmin() ? ('<select id="og_comprador">'+compOpts+'</select>') : ('<input id="og_comprador" value="'+esc(cur.comprador||whoNombre())+'" readonly style="background:#f3f1e8;width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px" title="Sos el comprador logueado">');
   const condOpts=optSel(CONDICION_OPC,cur.condicion);
@@ -3125,8 +3127,9 @@ window.addOGItem=addOGItem; window.delOGItem=delOGItem; window.updateOGTotal=upd
 async function saveOG(id){
   const items=OG_ITEMS.filter(it=>(it.cod_art||'').trim()||(it.articulo||'').trim()||it.precio_unit)
     .map(it=>({cod_art:it.cod_art||'',articulo:it.articulo||'',hito:it.hito||'',cert_modo:(it.cert_modo==='unid'?'unid':'pct'),centro_costos:it.centro_costos||'',modulos:(it.modulos||[]).slice(0,5),cant:+it.cant||0,um:it.um||'UNI',precio_unit:+it.precio_unit||0,imp:it.imp||{}}));
-  const vv=resolveProv(document.getElementById('og_proveedor').value);
   const gv=id=>document.getElementById(id).value;
+  if(!canAdmin() && gv('og_comprador') && gv('og_certificador') && gv('og_comprador')===gv('og_certificador')){ toast('No podés certificar tu propia OG. Tiene que certificar otra persona.'); return; }
+  const vv=resolveProv(document.getElementById('og_proveedor').value);
   const obj={ fecha:gv('og_fecha'),
     proveedor_cod: vv?vv.codigo:'', proveedor: vv?(vv.razon||vv.comercial):(document.getElementById('og_proveedor').value||''),
     clasif_og:(document.getElementById('og_clasif').value||'').split(' — ')[0].trim(),
