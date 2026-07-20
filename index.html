@@ -234,6 +234,18 @@ table.grid.usub td,table.grid.usub th{padding:6px 11px;font-size:11.5px;}
 .modal-b{padding:18px;}
 .mcell{width:20px;height:20px;}
 .mstrip-lbl span{width:20px;}
+
+/* ===== Órdenes de pago: header fijo + columnas OP/Fecha congeladas ===== */
+.opswrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:12px}
+.opswrap>table{border-collapse:separate;border-spacing:0}
+.opswrap thead th{position:sticky;top:0;background:var(--cream);z-index:3}
+.opswrap td{background:#fff;white-space:nowrap}
+.opswrap tr.opreg td{background:#f6f5ee}
+.opswrap th:nth-child(1),.opswrap td:nth-child(1){position:sticky;left:0;z-index:2;width:34px;min-width:34px;text-align:center}
+.opswrap th:nth-child(2),.opswrap td:nth-child(2){position:sticky;left:34px;z-index:2;min-width:58px}
+.opswrap th:nth-child(3),.opswrap td:nth-child(3){position:sticky;left:92px;z-index:2;min-width:84px;white-space:nowrap}
+.opswrap thead th:nth-child(1),.opswrap thead th:nth-child(2),.opswrap thead th:nth-child(3){z-index:5;background:var(--cream)}
+.opswrap td:nth-child(10){white-space:normal;min-width:78px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1947,7 +1959,7 @@ async function renderCompras(){
       const nItems=(o.items||[]).length;
       const head='<tr class="og-head">'
         +'<td><button class="iconbtn" title="Ver detalle" onclick="toggleOG('+o.id+')" style="margin-right:4px">'+(exp?'▾':'▸')+'</button><strong>'+esc(o.numero||'—')+'</strong></td>'
-        +'<td style="font-size:11.5px;color:var(--muted)" title="'+esc(o.comprador||'')+'">'+(o.comprador?esc(ogxName(o.comprador)):'—')+'</td>'
+        +'<td style="font-size:11.5px;color:var(--muted)" title="'+esc(compCorto(o.comprador))+'">'+(o.comprador?esc(ogxName(o.comprador)):'—')+'</td>'
         +'<td style="font-size:11.5px;color:var(--muted)" title="'+esc(o.certificador||'')+'">'+(o.certificador?esc(ogxName(o.certificador)):'—')+'</td>'
         +'<td style="font-size:12px;color:var(--muted)">'+(o.proveedor_cod?esc(o.proveedor_cod):'—')+'</td>'
         +'<td style="color:var(--muted)">'+(o.clasif_og?('<strong>'+esc(o.clasif_og)+'</strong>'+(clasifDesc(o.clasif_og)&&clasifDesc(o.clasif_og)!==o.clasif_og?'<span style="font-size:11px"> · '+esc(clasifDesc(o.clasif_og))+'</span>':'')):esc(o.objeto||''))+'</td>'
@@ -2253,6 +2265,8 @@ window.proyectadoView=proyectadoView;
 
 /* ===== Filtro tipo Excel para Órdenes de pago ===== */
 let OP_FILTRO={};   // { col: [valores permitidos] }  · ausente = sin filtro
+function compCorto(n){ n=(n||'').trim(); if(!n) return ''; if(n.indexOf(',')>=0){ const parts=n.split(','); const ap=parts[0].trim(); const ini=(parts[1]||'').trim().charAt(0); return ap+(ini?', '+ini.toUpperCase()+'.':''); } const t=n.split(/\s+/); if(t.length===1) return t[0]; return t[t.length-1]+', '+t[0].charAt(0).toUpperCase()+'.'; }
+window.compCorto=compCorto;
 function opColVal(p,col){
   const o=ogById(p.og_id)||{};
   if(col==='op') return (p.op_numero!=null&&p.op_numero!=='')?('OP '+p.op_numero):'(sin OP)';
@@ -2260,9 +2274,10 @@ function opColVal(p,col){
   if(col==='prov') return o.proveedor_cod||'';
   if(col==='clasif') return o.clasif_og||'';
   if(col==='solp') return (o.solp!=null&&o.solp!=='')?String(o.solp):'(sin SOLP)';
-  if(col==='comprador') return o.comprador||'';
+  if(col==='comprador') return compCorto(o.comprador);
   if(col==='medio') return p.medio||'';
   if(col==='caja') return (CAJAS[p.moneda_pago]?CAJAS[p.moneda_pago].nombre:p.moneda_pago)||'';
+  if(col==='reg') return p.registrado ? (p.nro_asiento||'Registrada') : '(sin registrar)';
   return '';
 }
 function opUniqueVals(col){ const s=new Set(); (mem.pagos||[]).forEach(p=>{ const v=opColVal(p,col); if(v!=='') s.add(v); }); return [...s].sort((a,b)=>String(a).localeCompare(String(b),'es',{numeric:true})); }
@@ -2336,13 +2351,13 @@ function opsView(){
     let acc = COND_SIN_CAJA.includes(o.condicion) ? '<span style="color:var(--muted);font-size:11px">Finanzas</span>' : '<button class="btn ghost sm" onclick="exportAsientoTangoOP('+p.id+')">Asiento</button>';
     if(p.registrado){ if(canAdmin()) acc += ' <button class="btn ghost sm" onclick="opDesmarcar('+p.id+')">Desmarcar</button>'; }
     else if(canPago()||canFinanzas()){ acc += ' <button class="iconbtn del" title="Eliminar OP" onclick="askDelPago('+p.id+')">'+ICO.del+'</button>'; }
-    return '<tr'+(p.registrado?' style="background:#f6f5ee"':'')+'><td style="text-align:center">'+cb+'</td><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
+    return '<tr'+(p.registrado?' class="opreg"':'')+'><td style="text-align:center">'+cb+'</td><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
       +'<td>'+fmtDate(p.fecha)+'</td>'
       +'<td>OG '+esc(p.numero||'—')+'</td>'
       +'<td style="font-size:11px">'+esc(o.proveedor_cod||'')+'</td>'
       +'<td>'+esc(o.clasif_og||'')+'</td>'
       +'<td>'+esc(o.solp!=null&&o.solp!==''?o.solp:'—')+'</td>'
-      +'<td style="font-size:11px">'+esc(o.comprador||'')+'</td>'
+      +'<td style="font-size:11px">'+esc(compCorto(o.comprador))+'</td>'
       +'<td>'+esc(p.medio||'')+'</td>'
       +'<td style="font-size:11px">'+esc(caja)+'</td>'
       +'<td style="text-align:right">'+(tc?fmtNum(tc,2):'—')+'</td>'
@@ -2366,7 +2381,7 @@ function opsView(){
     +(selN?'<button class="btn ghost sm" onclick="opGenAsientoSel()">Asiento de '+selN+' sel.</button><button class="btn sm" onclick="opMarcarSel()">Marcar '+selN+' registradas</button>':'')
     +limpiar+'</div>';
   return '<div class="card"><div class="card-h" style="flex-wrap:wrap"><h3>Órdenes de pago</h3><span class="meta">Una fila por OG pagada. Seleccioná OPs para generar el asiento del lote y marcarlas como registradas.</span>'+toolbar+'</div>'
-    +'<table class="grid" style="font-size:12.5px"><thead><tr><th></th>'+th('OP N°','op')+th('Fecha','fecha')+th('OG','og')+th('Prov.','prov')+th('Clasif.','clasif')+th('SOLP','solp')+th('Comprador','comprador')+th('Medio','medio')+th('Caja','caja')+'<th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th><th style="text-align:center">Registrado</th><th style="text-align:center">Acciones</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div>';
+    +'<div class="opswrap"><table class="grid" style="font-size:12.5px;min-width:1180px"><thead><tr><th></th>'+th('OP N°','op')+th('Fecha','fecha')+th('OG','og')+th('Prov.','prov')+th('Clasif.','clasif')+th('SOLP','solp')+th('Comprador','comprador')+th('Medio','medio')+th('Caja','caja')+'<th style="text-align:right">TC pago</th><th style="text-align:right">Monto USD</th><th style="text-align:right">Monto ARS</th>'+th('Registrado','reg')+'<th style="text-align:center">Acciones</th></tr></thead><tbody>'+rows+foot+'</tbody></table></div></div>';
 }
 
 function colaView(cola){
@@ -2604,11 +2619,11 @@ function resumenPagos(cond_match, tipoTxt, esTarj){
     let acc = COND_SIN_CAJA.includes(o.condicion) ? '<span style="color:var(--muted);font-size:11px">Finanzas</span>' : '<button class="btn ghost sm" onclick="exportAsientoTangoOP('+p.id+')">Asiento</button>';
     if(p.registrado){ if(canAdmin()) acc += ' <button class="btn ghost sm" onclick="opDesmarcar('+p.id+')">Desmarcar</button>'; }
     else if(canPago()||canFinanzas()){ acc += ' <button class="iconbtn del" title="Eliminar OP" onclick="askDelPago('+p.id+')">'+ICO.del+'</button>'; }
-    return '<tr'+(p.registrado?' style="background:#f6f5ee"':'')+'><td style="text-align:center">'+cb+'</td><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
+    return '<tr'+(p.registrado?' class="opreg"':'')+'><td style="text-align:center">'+cb+'</td><td><strong>OP '+esc(p.op_numero!=null?p.op_numero:'—')+'</strong></td>'
       +'<td>'+fmtDate(p.fecha)+'</td><td>OG '+esc(p.numero||'—')+'</td>'
       +'<td style="font-size:11px">'+esc(o.proveedor_cod||'')+'</td>'
       +'<td>'+esc(o.clasif_og||'')+'</td>'
-      +'<td style="font-size:11px">'+esc(o.comprador||'')+'</td>'
+      +'<td style="font-size:11px">'+esc(compCorto(o.comprador))+'</td>'
       +(esTarj?'<td style="font-size:11px">'+esc(o.condicion||'')+'</td>':'<td>'+finInput(p,'banco_transf','banco...')+'</td>')
       +'<td style="text-align:right">'+(m.mUSD!=null?'US$ '+fmt2(m.mUSD):'—')+'</td>'
       +'<td style="text-align:right"><strong>'+(m.mARS!=null?'$ '+fmt2(m.mARS):'—')+'</strong></td>'
