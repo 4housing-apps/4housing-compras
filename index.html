@@ -311,6 +311,10 @@ const REDIRECT_URL = 'https://4housing-apps.github.io/4housing-compras/'; // Git
 const SB_REST = SB_URL + '/rest/v1';
 const DEMO_MODE = SB_URL.includes('TU-PROYECTO') || SB_KEY.includes('TU-ANON-KEY');
 let AUTH_USER = null;
+let CURRENT_NOMBRE=''; let CURRENT_EMAIL='';
+function whoEmail(){ return CURRENT_EMAIL || (AUTH_USER&&AUTH_USER.email) || (DEMO_MODE?('demo:'+DEMO_ROLE):''); }
+function whoNombre(){ return CURRENT_NOMBRE || (AUTH_USER&&(AUTH_USER.user_metadata&&AUTH_USER.user_metadata.name||AUTH_USER.email)) || ''; }
+window.whoEmail=whoEmail; window.whoNombre=whoNombre;
 let sbClient = null;
 
 /* ================= UTILIDADES ================= */
@@ -697,13 +701,13 @@ let current='compras';
 let ROLE={comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, finanzas:true};
 let DEMO_ROLE='admin';
 const DEMO_ROLES={
-  admin:{comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, finanzas:true, lbl:'Admin (todo)'},
-  comprador:{comprador:true, certificador:false, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Comprador'},
-  certificador:{comprador:false, certificador:true, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Certificador (técnica)'},
-  tesorero:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:false, lbl:'Tesorero'},
-  finanzas:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:true, lbl:'Finanzas'},
+  admin:{comprador:true, certificador:true, tesorero:true, confidencial:true, admin:true, finanzas:true, lbl:'Admin (todo)', nombre:'Seoane, Micaela', email:'micaela@4housing.com.ar'},
+  comprador:{comprador:true, certificador:false, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Comprador', nombre:'Garay, Ivan Alejandro', email:'demo-ivan@4housing.com.ar'},
+  certificador:{comprador:false, certificador:true, tesorero:false, confidencial:false, admin:false, finanzas:false, lbl:'Certificador (técnica)', nombre:'Bustillo, Ana Julia', email:'demo-ana@4housing.com.ar'},
+  tesorero:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:false, lbl:'Tesorero', nombre:'Pedretti, Gustavo Marcio', email:'demo-tesorero@4housing.com.ar'},
+  finanzas:{comprador:false, certificador:false, tesorero:true, confidencial:false, admin:false, finanzas:true, lbl:'Finanzas', nombre:'Rubio, Fabiana Paola', email:'demo-finanzas@4housing.com.ar'},
 };
-function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={comprador:r.comprador, certificador:r.certificador, tesorero:r.tesorero, confidencial:r.confidencial, admin:r.admin, finanzas:!!r.finanzas}; }
+function applyDemoRole(){ const r=DEMO_ROLES[DEMO_ROLE]||DEMO_ROLES.admin; ROLE={comprador:r.comprador, certificador:r.certificador, tesorero:r.tesorero, confidencial:r.confidencial, admin:r.admin, finanzas:!!r.finanzas}; CURRENT_NOMBRE=r.nombre||''; CURRENT_EMAIL=r.email||('demo:'+DEMO_ROLE); }
 async function loadRole(){
   if(DEMO_MODE){ applyDemoRole(); return; }
   ROLE={comprador:false, certificador:false, tesorero:false, confidencial:false, admin:false};   // por defecto, sin permisos
@@ -712,7 +716,7 @@ async function loadRole(){
     if(!email) return;
     const rows=await sbFetch('/usuarios_autorizados?select=*&email=eq.'+encodeURIComponent(email));
     const u=rows&&rows[0];
-    if(u) ROLE={comprador:!!u.es_comprador, certificador:!!u.es_certificador, tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial, admin:!!u.es_admin, finanzas:!!u.es_finanzas};
+    CURRENT_EMAIL=email; if(u){ ROLE={comprador:!!u.es_comprador, certificador:!!u.es_certificador, tesorero:!!u.es_tesorero, confidencial:!!u.ve_confidencial, admin:!!u.es_admin, finanzas:!!u.es_finanzas}; CURRENT_NOMBRE=u.nombre||''; }
   }catch(e){ /* si falla, queda sin permisos */ }
 }
 function canEditOG(){ return ROLE.comprador||ROLE.admin; }
@@ -2707,7 +2711,7 @@ async function savePago(ogId){
     sin_caja: COND_SIN_CAJA.includes(o.condicion),
     importe_pago:importe, observaciones:document.getElementById('pg_obs').value };
   try{
-    if(DEMO_MODE){ pago.id=Math.max(0,...(mem.pagos||[]).map(p=>+p.id||0))+1; pago.op_numero=Math.max(0,...(mem.pagos||[]).map(p=>+p.op_numero||0))+1; mem.pagos=mem.pagos||[]; mem.pagos.push(pago); }
+    if(DEMO_MODE){ pago.registrado_por=whoEmail(); pago.id=Math.max(0,...(mem.pagos||[]).map(p=>+p.id||0))+1; pago.op_numero=Math.max(0,...(mem.pagos||[]).map(p=>+p.op_numero||0))+1; mem.pagos=mem.pagos||[]; mem.pagos.push(pago); }
     else { pago.registrado_por=(AUTH_USER&&AUTH_USER.email)||''; await sbFetch('/pagos',{method:'POST',body:JSON.stringify(pago)}); await reloadDB(); }
   }catch(e){
     toast('No se pudo registrar el pago: '+(e && e.message ? e.message : e));
@@ -2834,8 +2838,9 @@ function openLiberarPanel(){
 }
 window.openLiberarPanel=openLiberarPanel;
 async function liberarCert(ogId, id){
-  if(!canEditOG()){ toast('Solo el comprador (o admin) puede liberar pagos.'); return; }
-  const patch={ aprobacion:'SI', estado:'Liberado', liberado_por:(AUTH_USER&&AUTH_USER.email)||'', liberado_fecha:new Date().toISOString().slice(0,10) };
+  const o=ogById(ogId);
+  if(!(canAdmin() || (o && o.creado_por && o.creado_por===whoEmail()))){ toast('Solo el comprador que creó esta OG (o admin) puede liberar el pago.'); return; }
+  const patch={ aprobacion:'SI', estado:'Liberado', liberado_por:whoEmail(), liberado_fecha:new Date().toISOString().slice(0,10) };
   try{
     if(DEMO_MODE){ const r=mem.certificados.find(x=>String(x.id)===String(id)); if(r) Object.assign(r,patch); }
     else { await sbFetch('/og_certificados?id=eq.'+id,{method:'PATCH',body:JSON.stringify(patch)}); await reloadDB(); }
@@ -2871,6 +2876,7 @@ function openOG(id){
   const provVal = cur.proveedor_cod ? (cur.proveedor_cod+' — '+(cur.proveedor||'')) : '';
   const certOpts=optSel(nombresCert(),cur.certificador);
   const compOpts=optSel(nombresComp(),cur.comprador);
+  const compField = canAdmin() ? ('<select id="og_comprador">'+compOpts+'</select>') : ('<input id="og_comprador" value="'+esc(cur.comprador||whoNombre())+'" readonly style="background:#f3f1e8;width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px" title="Sos el comprador logueado">');
   const condOpts=optSel(CONDICION_OPC,cur.condicion);
   const monOpts=optSel(MONEDA_OPC,cur.moneda);
   const costeoOpts=optSelNA(COSTEO_OPC,cur.costeo);
@@ -2887,7 +2893,7 @@ function openOG(id){
     +'<div class="field"><label>Fecha de creación</label><input id="og_fecha" type="date" value="'+esc(cur.fecha||hoy)+'"></div></div>'
     +'<div class="field"><label>Proveedor</label><input id="og_proveedor" value="'+esc(provVal)+'" placeholder="Escribí código o nombre…" autocomplete="off" onfocus="comboProv()" oninput="comboProv()" onblur="comboHideDelayed()"><div style="font-size:11px;color:var(--muted);margin-top:4px">Escribí código o nombre y elegí de la lista.</div></div>'
     +'<div class="field"><label>Clasificación (OG)</label><input id="og_clasif" value="'+esc(clasOGVal)+'" placeholder="Escribí código o nombre…" autocomplete="off" onfocus="comboClasOG()" oninput="comboClasOG()" onblur="comboHideDelayed()"><div style="font-size:11px;color:var(--muted);margin-top:4px">Se copia por defecto a cada renglón nuevo; podés cambiarla por renglón.</div></div>'
-    +'<div class="frow c2"><div class="field"><label>Comprador (crea la OG)</label><select id="og_comprador">'+compOpts+'</select></div>'
+    +'<div class="frow c2"><div class="field"><label>Comprador (crea la OG)</label>'+compField+'</div>'
     +'<div class="field"><label>Certifica la OG</label><select id="og_certificador">'+certOpts+'</select></div></div>'
     +'<div class="frow c2"><div class="field"><label>Condición de compra</label><select id="og_condicion" onchange="ogCondChanged()">'+condOpts+'</select></div>'
     +'<div class="field"><label>Moneda</label><select id="og_moneda">'+monOpts+'</select></div></div>'
@@ -3135,6 +3141,7 @@ async function saveOG(id){
     items };
   obj.monto_total = items.length ? items.reduce((a,it)=>a+(it.cant*it.precio_unit),0) : (gv('og_monto')===''?null:+gv('og_monto'));
   const isNew=(id==null||id==='null');
+  if(isNew){ obj.creado_por=whoEmail(); } else { const prev=ogById(id); obj.creado_por=(prev&&prev.creado_por)?prev.creado_por:whoEmail(); }
   try{
     if(DEMO_MODE){
       if(isNew){ obj.id=Math.max(0,...mem.ogs.map(r=>+r.id||0))+1; obj.numero=String(Math.max(1999,...(mem.ogs||[]).map(x=>+x.numero||0))+1); mem.ogs.unshift(obj); }
@@ -3246,8 +3253,8 @@ async function saveCert(ogId, id){
     const nuevo=ogAcumPct(ogId)-prev+(+obj.pct||0);
     if(nuevo>100+EPS){ toast('Supera el 100% de la OG (quedaría '+nuevo.toFixed(1).replace('.0','')+'%). No se puede certificar más que el total.'); return; }
   }
-  if(DEMO_MODE){ if(id==null||id==='null'){ obj.id=Math.max(0,...mem.certificados.map(r=>+r.id||0))+1; mem.certificados.push(obj); } else { const r=mem.certificados.find(x=>String(x.id)===String(id)); if(r) Object.assign(r,obj); } }
-  else { if(id==null||id==='null') await sbFetch('/og_certificados',{method:'POST',body:JSON.stringify(obj)}); else await sbFetch('/og_certificados?id=eq.'+id,{method:'PATCH',body:JSON.stringify(obj)}); await reloadDB(); }
+  if(DEMO_MODE){ if(id==null||id==='null'){ obj.id=Math.max(0,...mem.certificados.map(r=>+r.id||0))+1; mem.certificados.push(obj); } else { const r=mem.certificados.find(x=>String(x.id)===String(id)); if(r) Object.assign(r,obj); } const oo=ogById(ogId); if(oo) oo.certificado_por=whoEmail(); }
+  else { if(id==null||id==='null') await sbFetch('/og_certificados',{method:'POST',body:JSON.stringify(obj)}); else await sbFetch('/og_certificados?id=eq.'+id,{method:'PATCH',body:JSON.stringify(obj)}); try{ await sbFetch('/ogs?id=eq.'+ogId,{method:'PATCH',body:JSON.stringify({certificado_por:whoEmail()})}); }catch(e){} await reloadDB(); }
   OG_EXPANDED.add(ogId);
   closeModal(); toast('Certificado guardado'); renderCompras();
 }
