@@ -722,7 +722,7 @@ async function loadRole(){
 function canEditOG(){ return ROLE.comprador||ROLE.admin; }
 function canCert(){ return ROLE.certificador||ROLE.admin; }
 function canPago(){ return ROLE.tesorero||ROLE.admin; }
-function canFinanzas(){ return ROLE.finanzas||ROLE.admin; }
+function canFinanzas(){ return ROLE.finanzas||ROLE.admin||ROLE.tesorero; }
 window.canFinanzas=canFinanzas;
 function setDemoRole(v){ DEMO_ROLE=v; applyDemoRole(); buildNav(); go((current==='tesoreria' && !ROLE.tesorero)?'compras':current); }
 window.setDemoRole=setDemoRole;
