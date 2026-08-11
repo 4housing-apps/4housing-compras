@@ -1700,6 +1700,8 @@ function ogMaxPagable(og){
 }
 function ogMaxPagablePct(og){ const t=ogTotal(og); return t? Math.min(100, ogMaxPagable(og)/t*100) : 0; }
 function ogPendPagoPct(og){ return Math.max(0, ogMaxPagablePct(og)-ogPagadoPct(og)); }
+function ogPagadoMonto(og){ return ogPagadoPct(og)/100*ogTotal(og); }
+function ogPendPagoMonto(og){ return Math.max(0, ogMaxPagable(og)-ogPagadoMonto(og)); }
 const CAJAS={ARS:{cod:'11110071',nombre:'CAJA PESOS 2'}, USD:{cod:'11110073',nombre:'CAJA DOLARES 3'}};
 function cajaMovs(mon){ return (mem.pagos||[]).filter(p=>p.moneda_pago===mon && !p.sin_caja); }
 function cajaSaldo(mon){ const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; return ini - cajaMovs(mon).reduce((a,p)=>a+(+p.importe_pago||0),0); }
@@ -2502,14 +2504,14 @@ window.asientoTangoSheets=asientoTangoSheets; window.exportAsientoTango=exportAs
 
 function openPago(ogId){
   const o=ogById(ogId); const monOG=ogMonedaCode(o);
-  const pendPct=ogPendPagoPct(o); const tot=ogTotal(o);
+  const pendPct=ogPendPagoPct(o); const pendMonto=ogPendPagoMonto(o); const tot=ogTotal(o); const simbOG=monOG==='USD'?'US$ ':'$ ';
   const tc=USD_VENTA||'';
   const antInfo = (o.condicion==='CON ANTICIPO')
     ? '<br><span style="color:var(--olive-deep)">Anticipo '+(+o.anticipo_pct||0)+'% · método '+(o.anticipo_metodo||'—')+(o.anticipo_metodo==='B'?' (recupera primero)':' (proporcional)')+'</span>'
     : (COND_SIN_CAJA.includes(o.condicion) ? '<br><span style="color:var(--olive-deep)">'+esc(o.condicion)+' · no impacta la caja (cancelación por compensación)</span>' : '');
   const body='<div style="background:#f3f1e8;border-radius:10px;padding:12px;margin-bottom:14px;font-size:12.5px">'
-    +'<strong>OG '+esc(o.numero)+'</strong> · '+esc(o.proveedor||'')+'<br>Total: '+(monOG==='USD'?'US$ ':'$ ')+tot.toLocaleString('es-AR')+' ('+(monOG==='USD'?'dólares':'pesos')+') · Certificado: '+ogLiberadoPct(o).toFixed(0)+'% · Ya pagado: '+ogPagadoPct(o).toFixed(0)+'% · <strong>Pagable ahora: '+pendPct.toFixed(0)+'%</strong>'+antInfo+'</div>'
-    +'<div class="frow c2"><div class="field"><label>% de la OG a pagar</label><input id="pg_pct" type="number" value="'+pendPct.toFixed(0)+'" oninput="pgCalc()"><div style="font-size:11px;color:var(--muted);margin-top:3px">Máx pendiente: '+pendPct.toFixed(0)+'%</div></div>'
+    +'<strong>OG '+esc(o.numero)+'</strong> · '+esc(o.proveedor||'')+'<br>Total: '+simbOG+tot.toLocaleString('es-AR')+' ('+(monOG==='USD'?'dólares':'pesos')+') · Certificado: '+ogLiberadoPct(o).toFixed(0)+'% · Ya pagado: '+ogPagadoPct(o).toFixed(0)+'% · <strong>Pagable ahora: '+simbOG+pendMonto.toLocaleString('es-AR',{maximumFractionDigits:2})+' ('+pendPct.toFixed(1).replace('.0','')+'%)</strong>'+antInfo+'</div>'
+    +'<div class="frow c2"><div class="field"><label>Importe a pagar ('+(monOG==='USD'?'US$':'$')+', moneda de la OG)</label><input id="pg_imp" type="number" step="0.01" value="'+pendMonto.toFixed(2)+'" oninput="pgCalc()"><div style="font-size:11px;color:var(--muted);margin-top:3px">Máx pendiente: '+simbOG+pendMonto.toLocaleString('es-AR',{maximumFractionDigits:2})+'</div></div>'
     +'<div class="field"><label>Fecha de pago</label><input id="pg_fecha" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div></div>'
     +'<div class="frow c2"><div class="field"><label>Moneda de pago</label><select id="pg_moneda" onchange="pgCalc()"><option value="ARS"'+(monOG==='ARS'?' selected':'')+'>Pesos (CAJA PESOS 2)</option><option value="USD"'+(monOG==='USD'?' selected':'')+'>Dólares (CAJA DOLARES 3)</option></select></div>'
     +'<div class="field"><label>Medio de pago</label><select id="pg_medio"><option>Efectivo</option><option>Transferencia</option><option>Cheque</option></select></div></div>'
@@ -2523,10 +2525,9 @@ function openPago(ogId){
 window.openPago=openPago;
 function pgCalc(){
   const o=window._pgOG; if(!o) return; const monOG=ogMonedaCode(o);
-  const pct=+document.getElementById('pg_pct').value||0;
+  const montoOG=+document.getElementById('pg_imp').value||0;   // importe en moneda de la OG
   const monPago=document.getElementById('pg_moneda').value;
   const tc=+document.getElementById('pg_tc').value||0;
-  const montoOG=ogTotal(o)*pct/100;   // en moneda de la OG
   let importe=montoOG, nota='';
   const conv = monOG!==monPago;
   document.getElementById('pg_tcField').style.display = '';   // TC siempre visible
@@ -2534,25 +2535,24 @@ function pgCalc(){
     if(monOG==='USD'&&monPago==='ARS'){ importe=montoOG*tc; nota='US$ '+montoOG.toLocaleString('es-AR',{maximumFractionDigits:2})+' × '+tc+' = '; }
     else if(monOG==='ARS'&&monPago==='USD'){ importe= tc? montoOG/tc : 0; nota='$ '+montoOG.toLocaleString('es-AR')+' ÷ '+tc+' = '; }
   }
-  const caja=CAJAS[monPago];
-  const simb=monPago==='USD'?'US$ ':'$ ';
-  document.getElementById('pg_result').innerHTML='Sale de <strong>'+caja.nombre+'</strong> ('+caja.cod+')<br>Importe: '+nota+'<strong>'+simb+importe.toLocaleString('es-AR',{maximumFractionDigits:2})+'</strong>';
+  const caja=CAJAS[monPago]; const simb=monPago==='USD'?'US$ ':'$ ';
+  const pct=ogTotal(o)? montoOG/ogTotal(o)*100 : 0;
+  document.getElementById('pg_result').innerHTML='Equivale al <strong>'+pct.toFixed(1).replace('.0','')+'%</strong> de la OG.<br>Sale de <strong>'+caja.nombre+'</strong> ('+caja.cod+')<br>Importe: '+nota+'<strong>'+simb+importe.toLocaleString('es-AR',{maximumFractionDigits:2})+'</strong>';
   window._pgImporte=importe;
 }
 window.pgCalc=pgCalc;
 async function savePago(ogId){
   if(!canPago()){ toast('Solo el tesorero puede registrar pagos.'); return; }
   const o=ogById(ogId); const monOG=ogMonedaCode(o);
-  let pct=+document.getElementById('pg_pct').value||0;
-  const pend=ogPendPagoPct(o);
-  if(pct<=0){ toast('Ingresá un % mayor a 0'); return; }
-  if(pct>pend+0.5){ toast('El % supera lo pendiente (exacto: '+pend.toFixed(4)+'%)'); return; }
-  if(pct>pend) pct=pend;   // cargó el pendiente redondeado; ajusto al exacto para no pasarme
+  let montoOG=+document.getElementById('pg_imp').value||0;    // importe en moneda de la OG
+  const pendMonto=ogPendPagoMonto(o);
+  if(montoOG<=0){ toast('Ingresá un importe mayor a 0'); return; }
+  if(montoOG>pendMonto+0.01){ toast('El importe supera lo pendiente ('+(monOG==='USD'?'US$ ':'$ ')+pendMonto.toLocaleString('es-AR',{maximumFractionDigits:2})+')'); return; }
+  if(montoOG>pendMonto) montoOG=pendMonto;   // ajuste fino por centavos
+  const pct=ogTotal(o)? montoOG/ogTotal(o)*100 : 0;
   const monPago=document.getElementById('pg_moneda').value;
   const tc=+document.getElementById('pg_tc').value||0;
   if((monOG==='USD'||monPago==='USD') && !tc){ toast('Cargá el tipo de cambio'); return; }
-  // importe consistente con el % ya ajustado
-  const montoOG=ogTotal(o)*pct/100;
   let importe=montoOG;
   if(monOG!==monPago){ if(monOG==='USD'&&monPago==='ARS') importe=montoOG*tc; else if(monOG==='ARS'&&monPago==='USD') importe = tc? montoOG/tc : 0; }
   const pago={ og_id:o.id, numero:o.numero,
