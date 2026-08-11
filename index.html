@@ -2106,7 +2106,7 @@ window.ogReportRows=ogReportRows;
    ============================================================== */
 const ASIENTO_COLS=['FECHA','TIPO','ID CUENTA','CUENTA CONTABLE','Aux Req','02 EERR','03 PROYECTO','04 CONT/MOD','05 MANT','06 MU','07 HERR','08 RODADOS','10 SUELDOS','11 IIBB','Cód. Prov.','Proveedor','Legajo','Empleado','SOLP','OG','CONCEPTO','INGRESO $','EGRESO $','MOVIMIENTO $','SALDO $','LEYENDA TANGO','✓ ENV.','N° ASIENTO TANGO','OBSERVACIONES'];
 const CONTRAPARTIDA={cod:'11110071', nombre:'CAJA PESOS 2'};
-function auxReqStr(im){ const r=['02']; if(im.aux03)r.push('03'); if(im.aux04)r.push('04'); if(im.aux07)r.push('07'); if(im.aux08)r.push('08'); return r.join(' / '); }
+function auxReqStr(im){ const r=['02']; if(im.aux03)r.push('03'); if(im.aux04)r.push('04'); if(im.aux05)r.push('05'); if(im.aux06)r.push('06'); if(im.aux07)r.push('07'); if(im.aux08)r.push('08'); return r.join(' / '); }
 function asientoRows(ogs){
   const rows=[ASIENTO_COLS.slice()];
   ogs.forEach(o=>{
@@ -2469,6 +2469,9 @@ function asientoTangoSheets(ogs){
       if(im.aux04){ const mods=String(im.aux04).split(' | ').filter(Boolean); const p=mods.length===1?100:''; // SUPUESTO: si hay >1 módulo, el % lo definís vos
         mods.forEach(m=>aux.push([id,nro,'04','CONTENEDOR/MODULO',m,auxDescLookup('4',m),p,imp,leyenda])); }
       if(im.aux08){ aux.push([id,nro,'08','RODADOS',im.aux08,auxDescLookup('8',im.aux08),100,imp,leyenda]); }               // Aux 08 rodado
+      if(im.aux05){ aux.push([id,nro,'05','MANTENIMIENTO BS DE USO',im.aux05,auxDescLookup('5',im.aux05),100,imp,leyenda]); } // Aux 05 bien de uso
+      if(im.aux06){ aux.push([id,nro,'06','MUEBLES Y UTILES',im.aux06,auxDescLookup('6',im.aux06),100,imp,leyenda]); }        // Aux 06 mueble
+      if(im.aux07){ aux.push([id,nro,'07','HERRAMIENTAS',im.aux07,auxDescLookup('7',im.aux07),100,imp,leyenda]); }            // Aux 07 herramienta
     });
     // contrapartida de caja (total OG) → al HABER
     const tot=ogTotal(o);
