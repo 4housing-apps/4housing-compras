@@ -3563,6 +3563,13 @@ async function reloadDB(){
       const op=await sbFetchAll('/aux_opciones?select=tipo_cod,cod,descripcion,habil,confidencial&order=tipo_cod.asc');
       if(op&&op.length){ const m={}; op.forEach(o=>{ (m[o.tipo_cod]=m[o.tipo_cod]||[]).push({cod:o.cod,desc:o.descripcion||'',habil:o.habil||'',confidencial:!!o.confidencial}); }); CONTA_DB.auxopc=m; }
     }catch(e){}
+    // Reglas del motor de asiento por clasificación (Supabase pisa la semilla embebida; un vacío no pisa)
+    try{
+      const cr=await sbFetch('/clasif_renglon?select=codigo,eerr,cuenta_cod,aux,nqnable,migrado');
+      if(cr&&cr.length){ let n=0; cr.forEach(r=>{ const cod=String(r.codigo||'').toUpperCase().trim();
+        if(cod && r.eerr){ CLASIF_RULES[cod]={eerr:r.eerr, cuenta:r.cuenta_cod||null, aux:r.aux||'none', nqnable:!!r.nqnable, migrado:!!r.migrado}; n++; } });
+        window.__clasifRulesN=n; }
+    }catch(e){ /* si la tabla no tiene las columnas del motor, queda la semilla embebida */ }
     // Usuarios (para desplegables Comprador / Certifica la OG) — desde la vista pública (solo nombre + flags)
     try{
       const us=await sbFetch('/usuarios_publicos?select=nombre,es_comprador,es_certificador&order=nombre.asc');
