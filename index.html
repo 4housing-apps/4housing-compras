@@ -2495,7 +2495,7 @@ function asientoTangoSheets(ogs, opByOg){
     const id=o.numero||o.id;                              // Identificador = N° OG
     const monCode=ogMonedaCode(o)==='USD'?'DOL':'PES';
     let fecha=o.fecha||''; try{ if(/^\d{4}-\d{2}-\d{2}/.test(o.fecha)) fecha=new Date(o.fecha+'T00:00:00'); }catch(e){}
-    const concepto='OG '+(o.numero||'')+' - '+(o.proveedor||o.objeto||'');
+    const concepto=_leyCaja(o,opByOg);   // Concepto cabecera: OP - COD PROV - OG (mismo estilo que la leyenda)
     cab.push([id, fecha, ASIENTO_CLASE, ASIENTO_TIPO_CN, ASIENTO_ESTADO_DEF, monCode, concepto, '', (o.solp!=null?o.solp:''), (o.numero||''), '', 'No', '']);
     // renglones de gasto (uno por renglón de la OG) → al DEBE
     let nro=0;
