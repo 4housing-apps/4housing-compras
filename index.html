@@ -3463,6 +3463,172 @@ async function syncProvAplicar(){
 }
 window.syncProvAplicar=syncProvAplicar;
 
+/* ===== Sincronizar CUENTAS CONTABLES con Tango (hasta 3 bases) ===== */
+let SYNC_CTA=null;
+function openSyncCuentas(){
+  if(!ROLE.admin){ toast('Solo un administrador puede sincronizar cuentas.'); return; }
+  SYNC_CTA=null;
+  const body='<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Subí hasta 3 exports de cuentas contables de Tango (una por base). La app las combina por código e informa qué hay que crear, qué cambió y los casos donde dos bases dicen algo distinto del mismo código (ahí elegís vos cuál vale). No se borra nada. <strong>No escribe nada hasta que toques Aplicar.</strong></div>'
+    +'<div class="field"><label>Cuentas contables — hasta 3 archivos (.xlsx) *</label><input id="syncc_files" type="file" accept=".xlsx,.xls" multiple></div>'
+    +'<div id="synccMsg" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px"></div>'
+    +'<div id="synccReport" style="margin-top:12px"></div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn" id="synccAnalizarBtn" onclick="syncCtaAnalizar()">Analizar</button>';
+  openModal('Sincronizar cuentas contables con Tango', body, foot, 'xwide');
+}
+window.openSyncCuentas=openSyncCuentas;
+
+const _SYNC_CTA_CAMPOS=['desc','clase','tipo','saldo','usa_aux','habil'];
+const _SYNC_CTA_COLS={desc:'descripcion',clase:'clase',tipo:'tipo',saldo:'saldo',usa_aux:'usa_aux',habil:'habil'};
+
+async function syncCtaAnalizar(){
+  const files=Array.from((document.getElementById('syncc_files').files)||[]);
+  const msg=document.getElementById('synccMsg');
+  const setErr=t=>{ msg.style.color='#b3261e'; msg.textContent=t; };
+  if(!files.length){ setErr('Necesito al menos un archivo.'); return; }
+  if(files.length>3){ setErr('Máximo 3 archivos a la vez.'); return; }
+  msg.style.color='var(--muted)'; msg.textContent='Leyendo '+files.length+' archivo(s)…';
+  try{
+    const wbs=await Promise.all(files.map(f=>_syncReadWb(f)));
+    const fuentes=[];
+    wbs.forEach((wb,idx)=>{
+      const rows=_syncSheetRows(wb, h=>_syncIdx(h,'Código')>=0 && _syncIdx(h,'Clase de cuenta')>=0);
+      if(!rows) throw new Error('En '+files[idx].name+' no encontré columnas "Código" y "Clase de cuenta".');
+      const H=rows[0];
+      const iCod=_syncIdx(H,'Código'), iDesc=_syncIdx(H,'Descripción'), iClase=_syncIdx(H,'Clase de cuenta'),
+            iTipo=_syncIdx(H,'Tipo de cuenta'), iSaldo=_syncIdx(H,'Saldo habitual'),
+            iUsaAux=_syncIdx(H,'Usa auxiliares contables'), iHabil=_syncIdx(H,'Habilitado');
+      const map={};
+      for(let i=1;i<rows.length;i++){
+        const c=_syncNorm(rows[i][iCod]); if(!c) continue;
+        map[c]={ cod:c, desc:_syncNorm(rows[i][iDesc]), clase:_syncNorm(rows[i][iClase]), tipo:_syncNorm(rows[i][iTipo]),
+                  saldo:_syncNorm(rows[i][iSaldo]), usa_aux:_syncNorm(rows[i][iUsaAux]), habil:_syncNorm(rows[i][iHabil]) };
+      }
+      fuentes.push({name:files[idx].name, map});
+    });
+    const allCods=new Set(); fuentes.forEach(fu=>Object.keys(fu.map).forEach(c=>allCods.add(c)));
+    const merged={}, conflictos=[];
+    allCods.forEach(c=>{
+      const recs=fuentes.filter(fu=>fu.map[c]).map(fu=>({fuente:fu.name, rec:fu.map[c]}));
+      const distintos=[];
+      recs.forEach(r=>{
+        const key=_SYNC_CTA_CAMPOS.map(k=>r.rec[k]).join('|');
+        const ex=distintos.find(d=>d.key===key);
+        if(ex) ex.fuentes.push(r.fuente); else distintos.push({key, rec:r.rec, fuentes:[r.fuente]});
+      });
+      if(distintos.length===1){ merged[c]=distintos[0].rec; }
+      else{ conflictos.push({cod:c, opciones:distintos.map(d=>({rec:d.rec, fuentes:d.fuentes}))}); }
+    });
+    const app={}; (CONTA_DB.cuentas||[]).forEach(r=>{ app[_syncNorm(r.cod)]=r; });
+    const nuevos=[], modificados=[];
+    Object.keys(merged).sort().forEach(c=>{
+      const t=merged[c], a=app[c];
+      if(!a){ nuevos.push(t); return; }
+      const diffs=[];
+      _SYNC_CTA_CAMPOS.forEach(k=>{ if(t[k] && _syncNorm(a[k])!==t[k]) diffs.push([k,a[k]||'',t[k]]); });
+      if(diffs.length) modificados.push({t,diffs});
+    });
+    const enAppNoTango=Object.keys(app).filter(c=>!allCods.has(c)).map(c=>app[c]);
+    SYNC_CTA={nuevos, modificados, conflictos, enAppNoTango, totTango:allCods.size, resoluciones:{}};
+    msg.style.color='var(--muted)';
+    msg.textContent='Tango ('+fuentes.length+' archivo(s)): '+SYNC_CTA.totTango+' cuentas · App: '+(CONTA_DB.cuentas||[]).length+' cuentas.';
+    renderSyncCtaReport();
+  }catch(e){ setErr('Error: '+(e.message||e)); }
+}
+window.syncCtaAnalizar=syncCtaAnalizar;
+
+function syncCtaSetResolucion(cod, val){
+  if(!SYNC_CTA) return;
+  if(val==='') delete SYNC_CTA.resoluciones[cod]; else SYNC_CTA.resoluciones[cod]=parseInt(val,10);
+  renderSyncCtaReport();
+}
+window.syncCtaSetResolucion=syncCtaSetResolucion;
+
+function renderSyncCtaReport(){
+  const box=document.getElementById('synccReport'); if(!box||!SYNC_CTA) return;
+  const R=SYNC_CTA;
+  const b=(n,txt,cls)=>'<span class="badge '+(cls||'b-gris')+'" style="margin-right:7px">'+n+' '+txt+'</span>';
+  const nResueltos=Object.keys(R.resoluciones).length;
+  let h='<div style="margin-bottom:12px">'
+    + b(R.nuevos.length,'nuevas','b-verde')
+    + b(R.modificados.length,'modificadas','b-ambar')
+    + b(R.conflictos.length,'conflicto entre bases'+(R.conflictos.length?' ('+nResueltos+' resuelto/s)':''),R.conflictos.length?'b-rojo':'b-gris')
+    + b(R.enAppNoTango.length,'en app / no en ningún archivo','b-gris')
+    + '</div>';
+  h+=_syncSection('Nuevas — hay que crearlas', R.nuevos.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Clase</th><th>Tipo</th></tr></thead><tbody>'
+     + R.nuevos.slice(0,400).map(t=>'<tr><td><strong>'+esc(t.cod)+'</strong></td><td>'+esc(t.desc)+'</td><td style="font-size:12px">'+esc(t.clase||'—')+'</td><td style="font-size:12px">'+esc(t.tipo||'—')+'</td></tr>').join('')
+     + '</tbody></table>'+_syncMore(R.nuevos.length,400), true);
+  h+=_syncSection('Modificadas — cambió algún dato en Tango', R.modificados.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Campo</th><th>Antes (app)</th><th>Ahora (Tango)</th></tr></thead><tbody>'
+     + R.modificados.slice(0,400).map(m=>m.diffs.map((d,k)=>'<tr><td>'+(k===0?'<strong>'+esc(m.t.cod)+'</strong>':'')+'</td><td style="font-size:12px">'+esc(d[0])+'</td><td style="font-size:11.5px;color:var(--muted)">'+esc(d[1]||'—')+'</td><td style="font-size:11.5px">'+esc(d[2]||'—')+'</td></tr>').join('')).join('')
+     + '</tbody></table>'+_syncMore(R.modificados.length,400), true);
+  const confRows=R.conflictos.map(cf=>{
+    const sel=R.resoluciones[cf.cod];
+    const opts=cf.opciones.map((o,idx)=>'<option value="'+idx+'"'+(sel===idx?' selected':'')+'>'+esc(o.fuentes.join(', '))+': '+esc(o.rec.desc)+' · '+esc(o.rec.clase)+' · usa_aux='+esc(o.rec.usa_aux)+' · habil='+esc(o.rec.habil)+'</option>').join('');
+    return '<tr><td><strong>'+esc(cf.cod)+'</strong></td><td><select style="font-size:11.5px;max-width:520px" onchange="syncCtaSetResolucion(\''+esc(cf.cod)+'\',this.value)">'
+      +'<option value=""'+(sel===undefined?' selected':'')+'>— no aplicar —</option>'+opts+'</select></td></tr>';
+  }).join('');
+  h+=_syncSection('Conflicto entre bases — mismo código, datos distintos. Elegí cuál vale en cada caso.', R.conflictos.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Elegir</th></tr></thead><tbody>'+confRows+'</tbody></table>', R.conflictos.length>0);
+  h+=_syncSection('En la app y no en ningún archivo subido — posibles bajas, revisá. No se borra nada.', R.enAppNoTango.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th></tr></thead><tbody>'
+     + R.enAppNoTango.slice(0,400).map(a=>'<tr><td><strong>'+esc(a.cod)+'</strong></td><td>'+esc(a.desc||'—')+'</td></tr>').join('')
+     + '</tbody></table>'+_syncMore(R.enAppNoTango.length,400), false);
+  box.innerHTML=h;
+  const canApply=R.nuevos.length||R.modificados.length||nResueltos;
+  document.getElementById('modalFoot').innerHTML='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn" id="synccAplicarBtn" onclick="syncCtaAplicar()"'+(canApply?'':' disabled')+'>Aplicar ('+R.nuevos.length+' crear · '+R.modificados.length+' actualizar'+(R.conflictos.length?' · '+nResueltos+'/'+R.conflictos.length+' conflicto/s resuelto/s':'')+')</button>';
+}
+window.renderSyncCtaReport=renderSyncCtaReport;
+
+async function syncCtaAplicar(){
+  if(!ROLE.admin){ toast('Solo un administrador puede aplicar cambios.'); return; }
+  if(!SYNC_CTA) return;
+  const {nuevos, modificados, conflictos, resoluciones}=SYNC_CTA;
+  const app={}; (CONTA_DB.cuentas||[]).forEach(r=>{ app[_syncNorm(r.cod)]=r; });
+  const confResueltos=conflictos.filter(cf=>resoluciones[cf.cod]!==undefined).map(cf=>cf.opciones[resoluciones[cf.cod]].rec);
+  const confNuevos=confResueltos.filter(t=>!app[t.cod]);
+  const confModificados=confResueltos.filter(t=>app[t.cod]).map(t=>{
+    const a=app[t.cod], diffs=[];
+    _SYNC_CTA_CAMPOS.forEach(k=>{ if(t[k] && _syncNorm(a[k])!==t[k]) diffs.push([k,a[k]||'',t[k]]); });
+    return {t,diffs};
+  }).filter(m=>m.diffs.length);
+  const todosNuevos=nuevos.concat(confNuevos);
+  const todosModificados=modificados.concat(confModificados);
+  if(!todosNuevos.length && !todosModificados.length){ toast('No hay cambios para aplicar.'); return; }
+  const pendConf=conflictos.length - Object.keys(resoluciones).length;
+  if(!confirm('Se van a CREAR '+todosNuevos.length+' cuenta(s) y ACTUALIZAR '+todosModificados.length+' en Supabase.'+(pendConf>0?' Quedan '+pendConf+' conflicto/s sin resolver: no se aplican.':'')+(DEMO_MODE?' (Estás en modo demo: solo cambia en memoria.)':'')+'\n¿Confirmás?')) return;
+  const btn=document.getElementById('synccAplicarBtn'); if(btn){ btn.disabled=true; btn.textContent='Aplicando…'; }
+  try{
+    if(todosNuevos.length){
+      const payload=todosNuevos.map(t=>({cod:t.cod, descripcion:t.desc, clase:t.clase, tipo:t.tipo, saldo:t.saldo, usa_aux:t.usa_aux, habil:t.habil}));
+      if(!DEMO_MODE){ for(let i=0;i<payload.length;i+=500){ await sbFetch('/cuentas_contables',{method:'POST', body:JSON.stringify(payload.slice(i,i+500))}); } }
+      payload.forEach(p=>{ if(!CONTA_DB.cuentas.some(x=>_syncNorm(x.cod)===p.cod)) CONTA_DB.cuentas.push({cod:p.cod, desc:p.descripcion, clase:p.clase, tipo:p.tipo, saldo:p.saldo, usa_aux:p.usa_aux, habil:p.habil, confidencial:false}); });
+    }
+    let okMod=0;
+    for(const m of todosModificados){
+      const t=m.t;
+      const upd={}; // nunca toca 'confidencial': eso lo define Micaela a mano en la app
+      _SYNC_CTA_CAMPOS.forEach(k=>{ if(t[k]) upd[_SYNC_CTA_COLS[k]]=t[k]; });
+      if(Object.keys(upd).length){
+        if(!DEMO_MODE){ await sbFetch('/cuentas_contables?cod=eq.'+encodeURIComponent(t.cod),{method:'PATCH', body:JSON.stringify(upd)}); }
+        const a=CONTA_DB.cuentas.find(x=>_syncNorm(x.cod)===t.cod);
+        if(a){ _SYNC_CTA_CAMPOS.forEach(k=>{ if(t[k]) a[k]=t[k]; }); }
+      }
+      okMod++;
+    }
+    CONTA_DB.cuentas.sort((a,b)=>String(a.cod).localeCompare(String(b.cod)));
+    closeModal();
+    toast('Listo: '+todosNuevos.length+' creadas, '+okMod+' actualizadas'+(pendConf>0?' ('+pendConf+' conflicto/s quedaron sin resolver)':'')+(DEMO_MODE?' (demo)':''));
+    renderDic();
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Aplicar cambios'; }
+    toast('Error al aplicar: '+(e.message||e));
+  }
+}
+window.syncCtaAplicar=syncCtaAplicar;
+
 function filterDic(v){ DIC_SEARCH=v; paintDic(); }
 window.filterDic=filterDic;
 
@@ -3542,7 +3708,8 @@ function paintDic(){
     if(!verConf) ct=ct.filter(r=>!r.confidencial);
     if(q) ct=ct.filter(r=>((r.cod||'')+' '+(r.desc||'')+' '+(r.clase||'')+' '+(r.tipo||'')).toLowerCase().includes(q));
     const cCol=verConf?'<th style="text-align:center;width:70px">Confid.</th>':'';
-    html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px"><h3 style="margin:0">Cuentas contables</h3><span class="meta">'+ct.length+' de '+(CONTA_DB.cuentas||[]).length+'</span>'+(verConf?'<span style="margin-left:auto;font-size:11px;color:var(--muted)">Tildá lo confidencial: solo lo ven usuarios habilitados</span>':'')+'</div>'
+    const syncCtaBtn=ROLE.admin?'<button class="btn sm" style="margin-left:auto" onclick="openSyncCuentas()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
+    html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px"><h3 style="margin:0">Cuentas contables</h3><span class="meta">'+ct.length+' de '+(CONTA_DB.cuentas||[]).length+'</span>'+(verConf?'<span style="margin-left:12px;font-size:11px;color:var(--muted)">Tildá lo confidencial: solo lo ven usuarios habilitados</span>':'')+syncCtaBtn+'</div>'
       +'<div class="dic-scroll"><table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Clase</th><th>Tipo</th><th>Saldo</th><th>Usa aux.</th><th>Habil.</th>'+cCol+'</tr></thead><tbody>'
       +ct.slice(0,600).map(r=>'<tr><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc)+(r.confidencial?' <span class="badge b-ambar">confid.</span>':'')+'</td><td style="font-size:11.5px">'+esc(r.clase||'—')+'</td><td style="font-size:11.5px">'+esc(r.tipo||'—')+'</td><td style="font-size:11.5px">'+esc(r.saldo||'—')+'</td><td style="font-size:11.5px">'+esc(r.usa_aux||'—')+'</td><td style="font-size:11.5px">'+esc(r.habil||'—')+'</td>'+(verConf?'<td style="text-align:center"><input type="checkbox" '+(r.confidencial?'checked':'')+' onclick="toggleConfidCuenta(\''+esc(r.cod)+'\')"></td>':'')+'</tr>').join('')+'</tbody></table></div>'
       +(ct.length>600?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 600 de '+ct.length+'. Usá el buscador.</div>':'')+'</div>';
