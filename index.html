@@ -3337,6 +3337,132 @@ async function syncAplicar(){
 }
 window.syncAplicar=syncAplicar;
 
+/* ===== Sincronizar PROVEEDORES con Tango ===== */
+let SYNC_PROV=null;
+function openSyncProv(){
+  if(!ROLE.admin){ toast('Solo un administrador puede sincronizar proveedores.'); return; }
+  SYNC_PROV=null;
+  const body='<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Subí el export de proveedores de Tango. La app lo compara contra los proveedores cargados por <strong>código</strong> e informa cuáles hay que crear y cuáles cambiaron. Un dato vacío de Tango nunca pisa uno que ya está, y no se borra ninguno. <strong>No escribe nada hasta que toques Aplicar.</strong></div>'
+    +'<div class="field"><label>Proveedores (.xlsx) *</label><input id="syncp_file" type="file" accept=".xlsx,.xls"></div>'
+    +'<div id="syncpMsg" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px"></div>'
+    +'<div id="syncpReport" style="margin-top:12px"></div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn" id="syncpAnalizarBtn" onclick="syncProvAnalizar()">Analizar</button>';
+  openModal('Sincronizar proveedores con Tango', body, foot, 'xwide');
+}
+window.openSyncProv=openSyncProv;
+
+async function syncProvAnalizar(){
+  const f=(document.getElementById('syncp_file').files||[])[0];
+  const msg=document.getElementById('syncpMsg');
+  const setErr=t=>{ msg.style.color='#b3261e'; msg.textContent=t; };
+  if(!f){ setErr('Necesito el archivo de proveedores.'); return; }
+  msg.style.color='var(--muted)'; msg.textContent='Leyendo archivo…';
+  try{
+    const wb=await _syncReadWb(f);
+    const rows=_syncSheetRows(wb, h=>_syncIdx(h,'Código')>=0 && _syncIdx(h,'Razón social','Razon social')>=0);
+    if(!rows) throw new Error('No encontré una hoja con columnas "Código" y "Razón social".');
+    const H=rows[0];
+    const iCod=_syncIdx(H,'Código'), iRazon=_syncIdx(H,'Razón social','Razon social'),
+          iCom=_syncIdx(H,'Nombre comercial'), iCuit=_syncIdx(H,'Nro. de documento','Nro de documento','CUIT'),
+          iProvC=_syncIdx(H,'Código de provincia','Codigo de provincia'), iProvD=_syncIdx(H,'Descripción de provincia','Descripcion de provincia'),
+          iAct=_syncIdx(H,'Actividad'), iIva=_syncIdx(H,'Código de categoría IVA','Codigo de categoria IVA');
+    const tango={};
+    for(let i=1;i<rows.length;i++){
+      const c=_syncNorm(rows[i][iCod]); if(!c) continue;
+      tango[c]={ codigo:c,
+        razon:_syncNorm(rows[i][iRazon]),
+        comercial:iCom>=0?_syncNorm(rows[i][iCom]):'',
+        cuit:iCuit>=0?_syncNorm(rows[i][iCuit]):'',
+        provincia_cod:iProvC>=0?_syncNorm(rows[i][iProvC]):'',
+        provincia:iProvD>=0?_syncNorm(rows[i][iProvD]):'',
+        actividad:iAct>=0?_syncNorm(rows[i][iAct]):'',
+        iva:iIva>=0?_syncNorm(rows[i][iIva]):'' };
+    }
+    const app={}; DIC.proveedores.forEach(p=>{ app[_syncNorm(p.codigo)]=p; });
+    const nuevos=[], modificados=[];
+    const CAMPOS=[['razon','Razón social'],['comercial','Nombre comercial'],['cuit','CUIT'],['provincia_cod','Cód. provincia'],['provincia','Provincia'],['actividad','Actividad'],['iva','Cat. IVA']];
+    Object.keys(tango).sort().forEach(c=>{
+      const t=tango[c], a=app[c];
+      if(!a){ nuevos.push(t); return; }
+      const diffs=[];
+      CAMPOS.forEach(([k,lbl])=>{ if(t[k] && _syncNorm(a[k])!==t[k]) diffs.push([lbl, a[k]||'', t[k]]); });
+      if(diffs.length) modificados.push({t, diffs});
+    });
+    const enAppNoTango=Object.keys(app).filter(c=>!tango[c]).map(c=>app[c]);
+    SYNC_PROV={nuevos, modificados, enAppNoTango, totTango:Object.keys(tango).length};
+    msg.style.color='var(--muted)';
+    msg.textContent='Tango: '+SYNC_PROV.totTango+' proveedores · App: '+DIC.proveedores.length+' proveedores.';
+    renderSyncProvReport();
+  }catch(e){ setErr('Error: '+(e.message||e)); }
+}
+window.syncProvAnalizar=syncProvAnalizar;
+
+function renderSyncProvReport(){
+  const box=document.getElementById('syncpReport'); if(!box||!SYNC_PROV) return;
+  const R=SYNC_PROV;
+  const b=(n,txt,cls)=>'<span class="badge '+(cls||'b-gris')+'" style="margin-right:7px">'+n+' '+txt+'</span>';
+  let h='<div style="margin-bottom:12px">'
+    + b(R.nuevos.length,'nuevos','b-verde')
+    + b(R.modificados.length,'modificados','b-ambar')
+    + b(R.enAppNoTango.length,'en app / no en Tango','b-gris')
+    + '</div>';
+  h+=_syncSection('Nuevos — hay que crearlos', R.nuevos.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Razón social</th><th>CUIT</th><th>Provincia</th><th>IVA</th></tr></thead><tbody>'
+     + R.nuevos.slice(0,400).map(t=>'<tr><td><strong>'+esc(t.codigo)+'</strong></td><td>'+esc(t.razon||'—')+'</td><td style="font-size:12px">'+esc(t.cuit||'—')+'</td><td style="font-size:12px">'+esc(t.provincia||'—')+'</td><td style="font-size:12px">'+esc(t.iva||'—')+'</td></tr>').join('')
+     + '</tbody></table>'+_syncMore(R.nuevos.length,400), true);
+  h+=_syncSection('Modificados — cambió algún dato en Tango', R.modificados.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Campo</th><th>Antes (app)</th><th>Ahora (Tango)</th></tr></thead><tbody>'
+     + R.modificados.slice(0,400).map(m=>m.diffs.map((d,k)=>'<tr><td>'+(k===0?'<strong>'+esc(m.t.codigo)+'</strong>':'')+'</td><td style="font-size:12px">'+esc(d[0])+'</td><td style="font-size:11.5px;color:var(--muted)">'+esc(d[1]||'—')+'</td><td style="font-size:11.5px">'+esc(d[2]||'—')+'</td></tr>').join('')).join('')
+     + '</tbody></table>'+_syncMore(R.modificados.length,400), true);
+  h+=_syncSection('En la app y no en el export — posibles bajas, revisá. No se borra nada.', R.enAppNoTango.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Razón social</th></tr></thead><tbody>'
+     + R.enAppNoTango.slice(0,400).map(a=>'<tr><td><strong>'+esc(a.codigo)+'</strong></td><td>'+esc(a.razon||a.comercial||'—')+'</td></tr>').join('')
+     + '</tbody></table>'+_syncMore(R.enAppNoTango.length,400), false);
+  box.innerHTML=h;
+  const canApply=R.nuevos.length||R.modificados.length;
+  document.getElementById('modalFoot').innerHTML='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn" id="syncpAplicarBtn" onclick="syncProvAplicar()"'+(canApply?'':' disabled')+'>Aplicar ('+R.nuevos.length+' crear · '+R.modificados.length+' actualizar)</button>';
+}
+window.renderSyncProvReport=renderSyncProvReport;
+
+async function syncProvAplicar(){
+  if(!ROLE.admin){ toast('Solo un administrador puede aplicar cambios.'); return; }
+  if(!SYNC_PROV) return;
+  const {nuevos, modificados}=SYNC_PROV;
+  if(!nuevos.length && !modificados.length){ toast('No hay cambios para aplicar.'); return; }
+  if(!confirm('Se van a CREAR '+nuevos.length+' proveedor(es) y ACTUALIZAR '+modificados.length+' en Supabase.'+(DEMO_MODE?' (Estás en modo demo: solo cambia en memoria.)':'')+'\n¿Confirmás?')) return;
+  const btn=document.getElementById('syncpAplicarBtn'); if(btn){ btn.disabled=true; btn.textContent='Aplicando…'; }
+  const CAMPOS=['razon','comercial','cuit','provincia_cod','provincia','actividad','iva'];
+  try{
+    if(nuevos.length){
+      const payload=nuevos.map(t=>({codigo:t.codigo, razon:t.razon, comercial:t.comercial||t.razon, cuit:t.cuit, provincia_cod:t.provincia_cod, provincia:t.provincia, actividad:t.actividad, iva:t.iva}));
+      if(!DEMO_MODE){ for(let i=0;i<payload.length;i+=500){ await sbFetch('/proveedores',{method:'POST', body:JSON.stringify(payload.slice(i,i+500))}); } }
+      payload.forEach(p=>{ if(!DIC.proveedores.some(x=>_syncNorm(x.codigo)===p.codigo)) DIC.proveedores.push({codigo:p.codigo, razon:p.razon, comercial:p.comercial||p.razon, cuit:p.cuit, tel:'', movil:'', email:'', web:'', provincia_cod:p.provincia_cod, provincia:p.provincia, actividad:p.actividad, iva:p.iva}); });
+    }
+    let okMod=0;
+    for(const m of modificados){
+      const t=m.t;
+      const upd={}; // solo campos con valor: un vacío de Tango nunca pisa lo existente
+      CAMPOS.forEach(k=>{ if(t[k]) upd[k]=t[k]; });
+      if(Object.keys(upd).length){
+        if(!DEMO_MODE){ await sbFetch('/proveedores?codigo=eq.'+encodeURIComponent(t.codigo),{method:'PATCH', body:JSON.stringify(upd)}); }
+        const a=DIC.proveedores.find(x=>_syncNorm(x.codigo)===t.codigo);
+        if(a){ CAMPOS.forEach(k=>{ if(t[k]) a[k]=t[k]; }); }
+      }
+      okMod++;
+    }
+    DIC.proveedores.sort((a,b)=>String(a.codigo).localeCompare(String(b.codigo)));
+    closeModal();
+    toast('Listo: '+nuevos.length+' creados, '+okMod+' actualizados'+(DEMO_MODE?' (demo)':''));
+    renderDic();
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Aplicar cambios'; }
+    toast('Error al aplicar: '+(e.message||e));
+  }
+}
+window.syncProvAplicar=syncProvAplicar;
+
 function filterDic(v){ DIC_SEARCH=v; paintDic(); }
 window.filterDic=filterDic;
 
@@ -3362,8 +3488,9 @@ function paintDic(){
         +'<td style="font-size:11.5px">'+esc(r.movil||'—')+'</td>'
         +'<td style="font-size:11.5px">'+(r.email?'<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>':'—')+'</td></tr>').join('')+'</tbody></table></div>'
       +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);margin-top:8px">Mostrando 500 de '+rows.length+'. Usá el buscador para filtrar.</div>':'');
+    const syncProvBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncProv()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px"><h3 style="margin:0">Proveedores</h3><span class="meta">'+rows.length+' de '+DIC.proveedores.length+'</span>'
-      +'<button class="btn sm" style="margin-left:auto" onclick="openNuevoProv()">'+ICO.plus+'Nuevo proveedor</button></div>'+tbl+'</div>';
+      +'<span style="margin-left:auto;display:inline-flex;gap:8px">'+syncProvBtn+'<button class="btn sm" onclick="openNuevoProv()">'+ICO.plus+'Nuevo proveedor</button></span></div>'+tbl+'</div>';
   } else if(DIC_TAB==='articulos'){
     let rows=DIC.articulos; if(q) rows=rows.filter(r=>dicMatch(r,q));
     const artTbl='<div class="dic-scroll"><table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Descripción adicional</th><th>Sinónimo</th><th>N° cuenta</th><th>Cuenta</th></tr></thead><tbody>'
@@ -3544,8 +3671,10 @@ async function reloadDB(){
     cajas.forEach(c=>{ if(c.moneda==='ARS') mem.caja.ARS_ini=+c.saldo_inicial||0; if(c.moneda==='USD') mem.caja.USD_ini=+c.saldo_inicial||0; });
     // Proveedores: si hay lista en Supabase, reemplaza el ejemplo embebido
     try{
-      const provs = await sbFetchAll('/proveedores?select=codigo,razon,comercial,cuit,tel,movil,email,web&order=codigo.asc');
-      if(provs && provs.length) DIC.proveedores = provs.map(p=>({codigo:p.codigo, razon:p.razon||'', comercial:p.comercial||p.razon||'', cuit:p.cuit||'', tel:p.tel||'', movil:p.movil||'', email:p.email||'', web:p.web||''}));
+      let provs;
+      try{ provs = await sbFetchAll('/proveedores?select=codigo,razon,comercial,cuit,tel,movil,email,web,provincia_cod,provincia,actividad,iva&order=codigo.asc'); }
+      catch(colErr){ /* columnas nuevas aún no creadas: caigo al select clásico */ provs = await sbFetchAll('/proveedores?select=codigo,razon,comercial,cuit,tel,movil,email,web&order=codigo.asc'); }
+      if(provs && provs.length) DIC.proveedores = provs.map(p=>({codigo:p.codigo, razon:p.razon||'', comercial:p.comercial||p.razon||'', cuit:p.cuit||'', tel:p.tel||'', movil:p.movil||'', email:p.email||'', web:p.web||'', provincia_cod:p.provincia_cod||'', provincia:p.provincia||'', actividad:p.actividad||'', iva:p.iva||''}));
     }catch(e){ /* si la tabla está vacía o falla, queda el ejemplo embebido */ }
     // Artículos: idem
     try{
