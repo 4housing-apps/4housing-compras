@@ -1646,6 +1646,7 @@ const CLASIF_RENGLON=[{"codigo": "ESTRUC", "desc": "ESTRUCTURA"}, {"codigo": "PR
 let CLASIF_ALL=CLASIF_RENGLON.map(r=>({cod:r.codigo, desc:r.desc, habil_comp:'Si'}));
 let DIC_CLASIF_TODOS=false; // false = mostrar solo habilitados (default)
 let DIC_AUX_TODOS=false;    // false = mostrar solo habilitados (default), aplica a la pestaña Auxiliares
+let CLASIF_FROM_SUPABASE=false; // true una vez que clasif_comprobantes trajo datos reales (saca el cartel "subconjunto de ejemplo")
 const COSTEO_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CERTIFICACION", "CLIMATIZACION", "COCINA", "CONSUMIBLES", "DESVIO", "EQUIPAMIENTO", "EST MODULAR", "ESTRUCTURA", "GC AISLACION", "GC AMOBLAMIENTO", "GC AREN Y PINTU", "GC ARENADO  Y PINTURA", "GC ART SANITARIOS", "GC ART. ILUMINA", "GC ART. ILUMINACION", "GC ASERRADERO", "GC CARPINTERIA", "GC CHAPA", "GC CORRALON", "GC ELECTRODOMES", "GC EQUIPAMIENTO", "GC ESTR MODULAR", "GC ESTRUCT MODULAR", "GC HERRAJES", "GC HERRERIA", "GC HIERROS", "GC HONORARIOS", "GC INS ELECTRIC", "GC INS GAS", "GC INS SANITARI", "GC INS TERMOMEC", "GC INST ELECTRICA", "GC INST GAS", "GC INST SANITARIA", "GC INST TERMOMECANICA", "GC LOGISTICA", "GC MONTAJE", "GC OBRA CIVIL", "GC OBRA SECA", "GC PANELES", "GC PISO", "GC POSVENTA", "GC REVESTIMIENT", "GC REVESTIMIENTO", "GC SANITARIOS", "GC SERVICIOS", "GC VIDRIO Y ESP", "GC VIDRIOS Y ESPEJOS", "INFRAESTRUCTURA", "LOGIST PERSONAL", "LOGISTICA", "LOGISTICA INTER", "MO EQUIPAMIENTO", "MO INST ELECTRI", "MO OBRA CIVIL", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "POLIZA SEGURO", "POST VENTA", "SANITARIO"];
 const ESTRUCTURA_OPC=["ACOPIO", "ALQ CONT 3ROS", "ALQUILERES", "BIENES DE USO", "COTO", "ENERG ELECT", "FOOD&BEV", "GASOIL", "GASTOS DTM", "GC MANTENIMIENT", "GS LIMPIEZA", "GS VAR OFICINA", "GS VAR TALLER", "GTO COMERCIAL", "GTO PUBLICIDAD", "GTOS BANCARIOS", "GTOS MANT MODUL", "GTOS MANT REEFE", "GTOS TRANSP ALQ", "HERRAMIENTAS", "HONOR CONTABLES", "HONOR ESCRIBANO", "HONOR LEGALES", "HONOR OTROS", "INVERSION", "LIBRERIA", "LICENCIAS", "MANTEN BS USO", "MEDIC LAB PREP", "MENSAJERIA", "MOVILIDAD COMBU", "MUEBLES Y UTILE", "PATENTES", "PEAJES", "PROVEEDORES", "RECOL RESIDUOS", "REMISES", "RODADOS", "RRHH", "SEGURIDAD ALARM", "SEGUROS", "SISTEMAS", "STOCK NQN", "TELEFONO"];
 const POSTVENTA_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CLIMATIZACION", "CUBIERTA", "DESVIO", "ELECTRICIDAD", "EQUIPAMIENTO", "ESTRUCTURA", "HERRERIA", "INST ELECTRICA", "LOGIST PERSONAL", "LOGISTICA", "MAT OBRA CIVIL", "MO INST CLIMATI", "MO INST ELECTRI", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "PISO", "POST VENTA", "SANITARIO"];
@@ -3790,6 +3791,7 @@ async function syncClasifAplicar(){
     CLASIF_ALL.length=0; Object.values(mapAll).sort((a,b)=>String(a.cod).localeCompare(String(b.cod))).forEach(r=>CLASIF_ALL.push(r));
     const habilitados=CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si').map(r=>({codigo:r.cod, desc:r.desc}));
     CLASIF_RENGLON.length=0; habilitados.forEach(r=>CLASIF_RENGLON.push(r));
+    CLASIF_FROM_SUPABASE=true;
     closeModal();
     toast('Listo: '+payload.length+' código(s) guardados'+(pendConf>0?' ('+pendConf+' conflicto/s quedaron sin resolver)':'')+(DEMO_MODE?' (demo)':''));
     renderDic();
@@ -3858,7 +3860,8 @@ function paintDic(){
     const syncClasBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncClasif()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
     const filtroBtn='<button class="btn ghost sm" onclick="setDicClasifTodos('+(!DIC_CLASIF_TODOS)+')">'+(DIC_CLASIF_TODOS?'Mostrar solo habilitados':'Mostrar todos (incluye inhabilitados)')+'</button>';
     const habilCol=ROLE.admin?'<th style="text-align:center;width:80px">Habil.</th>':'<th style="width:60px">Habil.</th>';
-    html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Clasificación de renglón</h3><span class="meta">'+rows.length+' de '+CLASIF_ALL.length+'</span>'+demoTag
+    const clasifTag=CLASIF_FROM_SUPABASE?'':demoTag;
+    html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Clasificación de renglón</h3><span class="meta">'+rows.length+' de '+CLASIF_ALL.length+'</span>'+clasifTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px">'+filtroBtn+syncClasBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid"><thead><tr><th>Código</th><th>Descripción</th>'+habilCol+'</tr></thead><tbody>'
       +rows.map(r=>{ const si=String(r.habil_comp||'').toLowerCase()==='si';
@@ -4087,6 +4090,7 @@ async function reloadDB(){
         cc.forEach(r=>CLASIF_ALL.push({cod:r.cod, desc:r.descripcion||r.cod, habil_comp:r.habil_comp||'No'}));
         const habilitados=CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si').map(r=>({codigo:r.cod, desc:r.desc}));
         if(habilitados.length){ CLASIF_RENGLON.length=0; habilitados.forEach(r=>CLASIF_RENGLON.push(r)); }
+        CLASIF_FROM_SUPABASE=true;
       }
     }catch(e){ /* si la tabla no existe todavía, queda la semilla embebida */ }
     // Usuarios (para desplegables Comprador / Certifica la OG) — desde la vista pública (solo nombre + flags)
