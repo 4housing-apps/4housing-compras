@@ -1654,6 +1654,49 @@ let SERIES_FROM_SUPABASE=false;
 let DIC_SERIES_ART='Todos'; // filtro por artículo en la pestaña Series activas
 let DIC_MODULOS_ART='Todos'; // filtro por artículo en la pestaña Módulos
 let DIC_CLASIF_AUXGRUPO='Todos'; // filtro por grupo de Auxiliar en Clasificación renglón
+let DIC_SERIES_DEP='Todos'; // (sin uso, reemplazado por filtro tipo Excel por columna)
+let DIC_MODULOS_DEP='Todos'; // (sin uso, reemplazado por filtro tipo Excel por columna)
+/* ---- Filtro tipo Excel por columna, reutilizable para Series activas / Módulos (mismo patrón que el Resumen de Compras) ---- */
+let DIC_COL_FILTRO={series:{}, modulos:{}};
+function _dicFilterBase(tabKey){ return SERIES_ACTIVAS.filter(r=>r.familia===(tabKey==='series'?'otros':'modulo')); }
+function dicColUnique(tabKey, col){
+  const s=new Set();
+  _dicFilterBase(tabKey).forEach(r=>{ const v=r[col]; if(v!=null && v!=='') s.add(String(v)); });
+  return [...s].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+}
+function dicColFilterActive(tabKey,col){ return !!(DIC_COL_FILTRO[tabKey][col] && DIC_COL_FILTRO[tabKey][col].length); }
+function dicRowPass(tabKey, row){
+  const f=DIC_COL_FILTRO[tabKey];
+  return Object.keys(f).every(col=>{ const allow=f[col]; if(!allow||!allow.length) return true; return allow.includes(String(row[col]==null?'':row[col])); });
+}
+function closeDicColFilter(){ const p=document.getElementById('dicFilterPop'); if(p) p.remove(); document.removeEventListener('mousedown', dicColFilterOutside, true); }
+function dicColFilterOutside(e){ const p=document.getElementById('dicFilterPop'); if(p && !p.contains(e.target) && !(e.target.closest && e.target.closest('.dicfbtn'))) closeDicColFilter(); }
+function openDicColFilter(tabKey, col, ev){
+  ev.stopPropagation(); const btn=ev.currentTarget; closeDicColFilter();
+  const vals=dicColUnique(tabKey,col);
+  const sel = DIC_COL_FILTRO[tabKey][col] ? new Set(DIC_COL_FILTRO[tabKey][col]) : new Set(vals);
+  const item=v=>'<label class="dicfitem" data-v="'+esc(v)+'" style="display:flex;align-items:center;gap:6px;padding:3px 4px;cursor:pointer;font-size:12px"><input type="checkbox" class="dicfchk" value="'+esc(v)+'" '+(sel.has(v)?'checked':'')+'>'+esc(v)+'</label>';
+  const pop=document.createElement('div'); pop.id='dicFilterPop';
+  pop.style.cssText='position:absolute;z-index:9999;background:#fff;border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;min-width:210px;max-width:300px;font-size:12.5px';
+  pop.innerHTML='<input type="text" placeholder="Buscar" oninput="dicColFilterSearch(this.value)" style="width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px;margin-bottom:6px;font-size:12.5px">'
+    +'<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-weight:700;border-bottom:1px solid var(--line);margin-bottom:4px;cursor:pointer"><input type="checkbox" '+(sel.size===vals.length?'checked':'')+' onchange="dicColFilterToggleAll(this.checked)">(Seleccionar todo)</label>'
+    +'<div id="dicfList" style="max-height:220px;overflow:auto">'+vals.map(item).join('')+'</div>'
+    +'<div style="display:flex;gap:6px;margin-top:8px"><button class="btn sm" style="flex:1" onclick="dicColFilterApply(\''+tabKey+'\',\''+col+'\')">Aplicar</button><button class="btn ghost sm" style="flex:1" onclick="dicColFilterClear(\''+tabKey+'\',\''+col+'\')">Limpiar</button></div>';
+  document.body.appendChild(pop);
+  const r=btn.getBoundingClientRect(); const vw=document.documentElement.clientWidth;
+  pop.style.top=(window.scrollY+r.bottom+4)+'px'; pop.style.left=(window.scrollX+Math.max(8,Math.min(r.left, vw-310)))+'px';
+  setTimeout(()=>document.addEventListener('mousedown', dicColFilterOutside, true),0);
+}
+function dicColFilterSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#dicfList .dicfitem').forEach(el=>{ el.style.display=el.getAttribute('data-v').toLowerCase().includes(q)?'flex':'none'; }); }
+function dicColFilterToggleAll(ck){ document.querySelectorAll('#dicfList .dicfitem').forEach(el=>{ if(el.style.display!=='none'){ const c=el.querySelector('.dicfchk'); if(c) c.checked=ck; } }); }
+function dicColFilterApply(tabKey,col){ const all=[...document.querySelectorAll('#dicfList .dicfchk')]; const chk=all.filter(c=>c.checked).map(c=>c.value); if(chk.length===all.length){ delete DIC_COL_FILTRO[tabKey][col]; } else { DIC_COL_FILTRO[tabKey][col]=chk; } closeDicColFilter(); paintDic(); }
+function dicColFilterClear(tabKey,col){ delete DIC_COL_FILTRO[tabKey][col]; closeDicColFilter(); paintDic(); }
+function dicColFilterClearAll(tabKey){ DIC_COL_FILTRO[tabKey]={}; paintDic(); }
+window.openDicColFilter=openDicColFilter; window.dicColFilterSearch=dicColFilterSearch; window.dicColFilterToggleAll=dicColFilterToggleAll; window.dicColFilterApply=dicColFilterApply; window.dicColFilterClear=dicColFilterClear; window.dicColFilterClearAll=dicColFilterClearAll;
+function dicTh(tabKey, label, col){
+  const active=dicColFilterActive(tabKey,col);
+  return '<th style="white-space:nowrap"><span class="dicfbtn" style="cursor:pointer;user-select:none" onclick="openDicColFilter(\''+tabKey+'\',\''+col+'\',event)">'+esc(label)+' <span style="font-size:9px'+(active?';color:#1a7a3a;font-weight:900':';color:var(--muted)')+'">▼</span></span></th>';
+}
 const COSTEO_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CERTIFICACION", "CLIMATIZACION", "COCINA", "CONSUMIBLES", "DESVIO", "EQUIPAMIENTO", "EST MODULAR", "ESTRUCTURA", "GC AISLACION", "GC AMOBLAMIENTO", "GC AREN Y PINTU", "GC ARENADO  Y PINTURA", "GC ART SANITARIOS", "GC ART. ILUMINA", "GC ART. ILUMINACION", "GC ASERRADERO", "GC CARPINTERIA", "GC CHAPA", "GC CORRALON", "GC ELECTRODOMES", "GC EQUIPAMIENTO", "GC ESTR MODULAR", "GC ESTRUCT MODULAR", "GC HERRAJES", "GC HERRERIA", "GC HIERROS", "GC HONORARIOS", "GC INS ELECTRIC", "GC INS GAS", "GC INS SANITARI", "GC INS TERMOMEC", "GC INST ELECTRICA", "GC INST GAS", "GC INST SANITARIA", "GC INST TERMOMECANICA", "GC LOGISTICA", "GC MONTAJE", "GC OBRA CIVIL", "GC OBRA SECA", "GC PANELES", "GC PISO", "GC POSVENTA", "GC REVESTIMIENT", "GC REVESTIMIENTO", "GC SANITARIOS", "GC SERVICIOS", "GC VIDRIO Y ESP", "GC VIDRIOS Y ESPEJOS", "INFRAESTRUCTURA", "LOGIST PERSONAL", "LOGISTICA", "LOGISTICA INTER", "MO EQUIPAMIENTO", "MO INST ELECTRI", "MO OBRA CIVIL", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "POLIZA SEGURO", "POST VENTA", "SANITARIO"];
 const ESTRUCTURA_OPC=["ACOPIO", "ALQ CONT 3ROS", "ALQUILERES", "BIENES DE USO", "COTO", "ENERG ELECT", "FOOD&BEV", "GASOIL", "GASTOS DTM", "GC MANTENIMIENT", "GS LIMPIEZA", "GS VAR OFICINA", "GS VAR TALLER", "GTO COMERCIAL", "GTO PUBLICIDAD", "GTOS BANCARIOS", "GTOS MANT MODUL", "GTOS MANT REEFE", "GTOS TRANSP ALQ", "HERRAMIENTAS", "HONOR CONTABLES", "HONOR ESCRIBANO", "HONOR LEGALES", "HONOR OTROS", "INVERSION", "LIBRERIA", "LICENCIAS", "MANTEN BS USO", "MEDIC LAB PREP", "MENSAJERIA", "MOVILIDAD COMBU", "MUEBLES Y UTILE", "PATENTES", "PEAJES", "PROVEEDORES", "RECOL RESIDUOS", "REMISES", "RODADOS", "RRHH", "SEGURIDAD ALARM", "SEGUROS", "SISTEMAS", "STOCK NQN", "TELEFONO"];
 const POSTVENTA_OPC=["ABERTURAS", "ACERO / HIERRO", "AISLACION / REV", "CLIMATIZACION", "CUBIERTA", "DESVIO", "ELECTRICIDAD", "EQUIPAMIENTO", "ESTRUCTURA", "HERRERIA", "INST ELECTRICA", "LOGIST PERSONAL", "LOGISTICA", "MAT OBRA CIVIL", "MO INST CLIMATI", "MO INST ELECTRI", "MO REVESTIMIENT", "MONTAJE", "PINTURA", "PISO", "POST VENTA", "SANITARIO"];
@@ -3212,8 +3255,7 @@ function exportDicTab(){
       ...rows.map(r=>[r.codigo,r.descripcion,r.desc_adicional,r.sinonimo,r.cuenta_cod,r.cuenta])];
     sheetName='Artículos'; fname='Diccionario_Articulos_'+hoy+'.xlsx';
   } else if(DIC_TAB==='series'){
-    let rows=SERIES_ACTIVAS.filter(r=>r.familia==='otros');
-    if(DIC_SERIES_ART!=='Todos') rows=rows.filter(r=>r.descripcion===DIC_SERIES_ART);
+    let rows=SERIES_ACTIVAS.filter(r=>r.familia==='otros').filter(r=>dicRowPass('series',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
     aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Partida','N° Despacho'],
       ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r.partida,r.numero_despacho])];
@@ -3232,8 +3274,7 @@ function exportDicTab(){
     })];
     sheetName='Clasificación'; fname='Diccionario_ClasificacionRenglon_'+hoy+'.xlsx';
   } else if(DIC_TAB==='modulos'){
-    let rows=SERIES_ACTIVAS.filter(r=>r.familia==='modulo');
-    if(DIC_MODULOS_ART!=='Todos') rows=rows.filter(r=>r.descripcion===DIC_MODULOS_ART);
+    let rows=SERIES_ACTIVAS.filter(r=>r.familia==='modulo').filter(r=>dicRowPass('modulos',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
     aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Partida','N° Despacho'],
       ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r.partida,r.numero_despacho])];
@@ -4095,38 +4136,58 @@ function paintDic(){
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px"><h3 style="margin:0">Artículos (compras · GC)</h3><span class="meta">'+rows.length+' de '+DIC.articulos.length+'</span>'+syncBtn+'</div>'+artTbl+'</div>';
   } else if(DIC_TAB==='series'){
     const base=SERIES_ACTIVAS.filter(r=>r.familia==='otros');
-    const arts=['Todos',...[...new Set(base.map(r=>r.descripcion).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))];
-    let rows=base;
-    if(DIC_SERIES_ART!=='Todos') rows=rows.filter(r=>r.descripcion===DIC_SERIES_ART);
+    let rows=base.filter(r=>dicRowPass('series',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
     const syncBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncSeries()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
+    const limpiarBtn=Object.keys(DIC_COL_FILTRO.series).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'series\')">Limpiar filtros</button>':'';
     const seriesTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux05_08=_serieAuxIndex(['05','06','07','08']);
-    const artSel='<select style="font-size:12.5px;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px" onchange="setDicSeriesArt(this.value)">'
-      +arts.map(a=>'<option'+(a===DIC_SERIES_ART?' selected':'')+'>'+esc(a)+(a==='Todos'?'':' ('+base.filter(r=>r.descripcion===a).length+')')+'</option>').join('')+'</select>';
+    const nowrap='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px'; // max-width:1px + colgroup fuerza que respete el ancho de columna
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Series activas</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+seriesTag
-      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+artSel+syncBtn+'</span></div>'
-      +'<div class="dic-scroll"><table class="grid"><thead><tr><th>Depósito</th><th>Descripción depósito</th><th>Artículo</th><th>Descripción</th><th>Serie</th><th>Comentario</th><th>Adicional 2</th><th>Cód. Barras</th><th>Adicional 1</th><th>Auxiliar</th></tr></thead><tbody>'
-      +rows.slice(0,500).map(r=>'<tr><td style="font-size:11.5px">'+esc(r.cod_deposito||'—')+'</td><td style="font-size:11.5px">'+esc(r.desc_deposito||'—')+'</td><td style="font-size:11.5px;color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td><td>'+esc(r.descripcion||'—')+'</td><td><strong>'+esc(r.serie)+'</strong></td><td style="font-size:11px;color:var(--muted)">'+esc(r.comentario||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.adicional_2||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.adicional_1||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(_serieAuxTexto(idxAux05_08,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
-      +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o el filtro de artículo.</div>':'')
-      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Herramientas, rodados y muebles/útiles individualizados por serie, con su depósito actual y el Auxiliar contable que le corresponde (cruzado por serie contra los grupos 05, 06, 07 y 08).</div></div>';
+      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
+      +'<div class="dic-scroll"><table class="grid" style="font-size:11px;table-layout:fixed;width:100%">'
+      +'<colgroup><col style="width:52px"><col style="width:130px"><col style="width:90px"><col style="width:210px"><col style="width:120px"><col style="width:120px"><col style="width:75px"><col style="width:80px"><col style="width:95px"><col style="width:90px"></colgroup>'
+      +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+'<th>Descripción depósito</th>'+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+'<th>Auxiliar</th></tr></thead><tbody>'
+      +rows.slice(0,500).map(r=>'<tr>'
+        +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
+        +'<td>'+esc(r.desc_deposito||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td>'
+        +'<td style="'+nowrap+'" title="'+esc(r.descripcion||'')+'">'+esc(r.descripcion||'—')+'</td>'
+        +'<td style="'+nowrap+'"><strong>'+esc(r.serie)+'</strong></td>'
+        +'<td style="'+nowrap+';color:var(--muted)" title="'+esc(r.comentario||'')+'">'+esc(r.comentario||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_2||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_1||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(_serieAuxTexto(idxAux05_08,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
+      +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o los filtros de columna (▼).</div>':'')
+      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Herramientas, rodados y muebles/útiles individualizados por serie, con su depósito actual y el Auxiliar contable que le corresponde (cruzado por serie contra los grupos 05, 06, 07 y 08). Tocá la flechita ▼ de cada columna para filtrar, como en Excel.</div></div>';
   } else if(DIC_TAB==='modulos'){
     const base=SERIES_ACTIVAS.filter(r=>r.familia==='modulo');
-    const arts=['Todos',...[...new Set(base.map(r=>r.descripcion).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))];
-    let rows=base;
-    if(DIC_MODULOS_ART!=='Todos') rows=rows.filter(r=>r.descripcion===DIC_MODULOS_ART);
+    let rows=base.filter(r=>dicRowPass('modulos',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
     const syncBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncSeries()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
+    const limpiarBtn=Object.keys(DIC_COL_FILTRO.modulos).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'modulos\')">Limpiar filtros</button>':'';
     const modTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux04=_serieAuxIndex(['04']);
-    const artSel='<select style="font-size:12.5px;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px" onchange="setDicModulosArt(this.value)">'
-      +arts.map(a=>'<option'+(a===DIC_MODULOS_ART?' selected':'')+'>'+esc(a)+(a==='Todos'?'':' ('+base.filter(r=>r.descripcion===a).length+')')+'</option>').join('')+'</select>';
+    const nowrap='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px';
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Módulos (alquiler)</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+modTag
-      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+artSel+syncBtn+'</span></div>'
-      +'<div class="dic-scroll"><table class="grid"><thead><tr><th>Depósito</th><th>Descripción depósito</th><th>Artículo</th><th>Descripción</th><th>Serie</th><th>Comentario</th><th>Adicional 2</th><th>Cód. Barras</th><th>Adicional 1</th><th>Auxiliar 04</th></tr></thead><tbody>'
-      +rows.slice(0,500).map(r=>'<tr><td style="font-size:11.5px">'+esc(r.cod_deposito||'—')+'</td><td style="font-size:11.5px">'+esc(r.desc_deposito||'—')+'</td><td style="font-size:11.5px;color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td><td>'+esc(r.descripcion||'—')+'</td><td><strong>'+esc(r.serie)+'</strong></td><td style="font-size:11px;color:var(--muted)">'+esc(r.comentario||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.adicional_2||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(r.adicional_1||'—')+'</td><td style="font-size:11px;color:var(--muted)">'+esc(_serieAuxTexto(idxAux04,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
-      +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o el filtro de artículo.</div>':'')
-      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Dónde está cada módulo hoy (stock, cliente, mantenimiento, venta) y su Auxiliar 04 real, cruzado por serie. El selector de Módulo al cargar una OG ya muestra este mismo depósito y excluye los vendidos.</div></div>';
+      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
+      +'<div class="dic-scroll"><table class="grid" style="font-size:11px;table-layout:fixed;width:100%">'
+      +'<colgroup><col style="width:52px"><col style="width:130px"><col style="width:90px"><col style="width:210px"><col style="width:120px"><col style="width:120px"><col style="width:75px"><col style="width:80px"><col style="width:95px"><col style="width:90px"></colgroup>'
+      +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+'<th>Descripción depósito</th>'+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+'<th>Auxiliar 04</th></tr></thead><tbody>'
+      +rows.slice(0,500).map(r=>'<tr>'
+        +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
+        +'<td>'+esc(r.desc_deposito||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td>'
+        +'<td style="'+nowrap+'" title="'+esc(r.descripcion||'')+'">'+esc(r.descripcion||'—')+'</td>'
+        +'<td style="'+nowrap+'"><strong>'+esc(r.serie)+'</strong></td>'
+        +'<td style="'+nowrap+';color:var(--muted)" title="'+esc(r.comentario||'')+'">'+esc(r.comentario||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_2||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_1||'—')+'</td>'
+        +'<td style="'+nowrap+';color:var(--muted)">'+esc(_serieAuxTexto(idxAux04,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
+      +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o los filtros de columna (▼).</div>':'')
+      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Dónde está cada módulo hoy (stock, cliente, mantenimiento, venta) y su Auxiliar 04 real, cruzado por serie. El selector de Módulo al cargar una OG ya muestra este mismo depósito y excluye los vendidos. Tocá la flechita ▼ de cada columna para filtrar, como en Excel.</div></div>';
   } else if(DIC_TAB==='clasif'){
     const idxAuxCod=_clasifCodigoAGrupos();
     let rows=(DIC_CLASIF_TODOS?CLASIF_ALL:CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si'));
