@@ -4002,6 +4002,28 @@ function _serieAuxTexto(idx, serie){
   if(hits.length===1) return 'Aux '+hits[0].grupo+' · '+hits[0].cod;
   return hits.map(h=>'Aux '+h.grupo+' · '+h.cod).join(' / ');
 }
+// Índice de Clasificación por serie: usa el prefijo de la descripción (lo que va antes de " - "), que es la serie. Mismo criterio que el cruce con Auxiliares.
+function _clasifPorSerie(){
+  const idx={};
+  (CLASIF_ALL||[]).forEach(r=>{
+    const d=String(r.desc||'');
+    const sp=(d.includes(' - ')?d.split(' - ',1)[0]:d).trim().toUpperCase();
+    if(!sp) return;
+    (idx[sp]=idx[sp]||[]).push(r.cod);
+  });
+  return idx;
+}
+// Adjunta a cada fila de Series/Módulos su Auxiliar (_aux) y Clasificación (_clasif) derivados por serie, para poder mostrarlos, filtrarlos y ordenarlos como columnas.
+function _enrichSeries(familia){
+  const idxAux=_serieAuxIndex(familia==='modulo'?['04']:['05','06','07','08']);
+  const idxClas=_clasifPorSerie();
+  SERIES_ACTIVAS.forEach(r=>{
+    if(r.familia!==familia) return;
+    r._aux=_serieAuxTexto(idxAux, r.serie)||'—';
+    const cs=idxClas[String(r.serie||'').trim().toUpperCase()];
+    r._clasif=(cs&&cs.length)?Array.from(new Set(cs)).join(' / '):'—';
+  });
+}
 // Cruce Código de Clasificación -> grupo de Auxiliar (02 EERR, 03 Instructivo, 04 Módulo, 05 Mant. Bs Uso, 06 Muebles, 07 Herramientas, 08 Rodados).
 // Acá la clave es el CÓDIGO directo (no la serie): para clasificación, código de clasificación = código de auxiliar.
 function _clasifCodigoAGrupos(){
@@ -4185,6 +4207,7 @@ function paintDic(){
     const limpiarArtBtn=Object.keys(DIC_COL_FILTRO.articulos).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'articulos\')">Limpiar filtros</button>':'';
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Artículos (compras · GC)</h3><span class="meta">'+rows.length+' de '+DIC.articulos.length+'</span><span style="margin-left:auto;display:inline-flex;gap:8px">'+limpiarArtBtn+syncBtn+'</span></div>'+artTbl+'</div>';
   } else if(DIC_TAB==='series'){
+    _enrichSeries('otros');
     const base=SERIES_ACTIVAS.filter(r=>r.familia==='otros');
     let rows=base.filter(r=>dicRowPass('series',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
@@ -4197,7 +4220,7 @@ function paintDic(){
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Series activas</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+seriesTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
-      +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+dicTh('series','Descripción depósito','desc_deposito')+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+'<th>Auxiliar</th></tr></thead><tbody>'
+      +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+dicTh('series','Descripción depósito','desc_deposito')+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+dicTh('series','Clasificación','_clasif')+dicTh('series','Auxiliar','_aux')+'</tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
         +'<td style="font-size:10.5px">'+esc(r.desc_deposito||'—')+'</td>'
@@ -4208,10 +4231,12 @@ function paintDic(){
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_2||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_1||'—')+'</td>'
-        +'<td style="'+nowrap+';color:var(--muted)">'+esc(_serieAuxTexto(idxAux05_08,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
+        +'<td style="'+nowrap+(r._clasif==='—'?';color:#b3261e':'')+'">'+esc(r._clasif)+'</td>'
+        +'<td style="'+nowrap+';color:'+(r._aux==='—'?'#b3261e':'var(--muted)')+'">'+esc(r._aux)+'</td></tr>').join('')+'</tbody></table></div>'
       +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o los filtros de columna (▼).</div>':'')
-      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Herramientas, rodados y muebles/útiles individualizados por serie, con su depósito actual y el Auxiliar contable que le corresponde (cruzado por serie contra los grupos 05, 06, 07 y 08). Tocá la flechita ▼ de cada columna para filtrar, como en Excel.</div></div>';
+      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Herramientas, rodados y muebles/útiles individualizados por serie, con su depósito actual, la Clasificación y el Auxiliar contable que le corresponde (cruzados por serie). Para el "pasá en limpio": filtrá la columna Clasificación o Auxiliar por "—" (▼) y te quedan las series que faltan mapear.</div></div>';
   } else if(DIC_TAB==='modulos'){
+    _enrichSeries('modulo');
     const base=SERIES_ACTIVAS.filter(r=>r.familia==='modulo');
     let rows=base.filter(r=>dicRowPass('modulos',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
@@ -4224,7 +4249,7 @@ function paintDic(){
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Módulos (alquiler)</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+modTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
-      +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+dicTh('modulos','Descripción depósito','desc_deposito')+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+'<th>Auxiliar 04</th></tr></thead><tbody>'
+      +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+dicTh('modulos','Descripción depósito','desc_deposito')+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+dicTh('modulos','Auxiliar 04','_aux')+'</tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
         +'<td style="font-size:10.5px">'+esc(r.desc_deposito||'—')+'</td>'
@@ -4235,7 +4260,7 @@ function paintDic(){
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_2||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.codigo_barras||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.adicional_1||'—')+'</td>'
-        +'<td style="'+nowrap+';color:var(--muted)">'+esc(_serieAuxTexto(idxAux04,r.serie)||'—')+'</td></tr>').join('')+'</tbody></table></div>'
+        +'<td style="'+nowrap+';color:'+(r._aux==='—'?'#b3261e':'var(--muted)')+'">'+esc(r._aux)+'</td></tr>').join('')+'</tbody></table></div>'
       +(rows.length>500?'<div style="font-size:11.5px;color:var(--muted);padding:8px 15px">Mostrando 500 de '+rows.length+'. Usá el buscador o los filtros de columna (▼).</div>':'')
       +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Dónde está cada módulo hoy (stock, cliente, mantenimiento, venta) y su Auxiliar 04 real, cruzado por serie. El selector de Módulo al cargar una OG ya muestra este mismo depósito y excluye los vendidos. Tocá la flechita ▼ de cada columna para filtrar, como en Excel.</div></div>';
   } else if(DIC_TAB==='clasif'){
@@ -4251,7 +4276,8 @@ function paintDic(){
     rows=rows.filter(r=>dicRowPass('clasif',r));
     rows = DIC_SORT.clasif ? dicApplySort('clasif', rows) : rows.slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
     const syncClasBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncClasif()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
-    const limpiarClasBtn=Object.keys(DIC_COL_FILTRO.clasif).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'clasif\')">Limpiar filtros</button>':'';
+    const hayFiltro = Object.keys(DIC_COL_FILTRO.clasif).length || DIC_CLASIF_AUXGRUPO!=='Todos' || !!q;
+    const limpiarClasBtn=hayFiltro?'<button class="btn ghost sm" onclick="clasifLimpiarTodo()">Limpiar filtros</button>':'';
     const filtroBtn='<button class="btn ghost sm" onclick="setDicClasifTodos('+(!DIC_CLASIF_TODOS)+')">'+(DIC_CLASIF_TODOS?'Mostrar solo habilitados':'Mostrar todos (incluye inhabilitados)')+'</button>';
     const gruposDisponibles=['Todos','02','03','04','05','06','07','08','Sin auxiliar'];
     const grupoSel='<select style="font-size:12.5px;border:1px solid var(--line-strong);border-radius:7px;padding:6px 8px" onchange="setDicClasifAuxgrupo(this.value)">'
@@ -4275,6 +4301,7 @@ function paintDic(){
         const cell=ROLE.admin?'<td style="text-align:center"><input type="checkbox" '+(si?'checked':'')+' onclick="toggleHabilClasif(\''+esc(r.cod)+'\')"></td>'
                               :'<td style="font-size:11.5px;color:'+(si?'inherit':'var(--muted)')+'">'+(si?'Sí':'No')+'</td>';
         return '<tr'+(si?'':' style="opacity:.55"')+'><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc)+'</td>'+catCell+'<td style="font-size:11.5px;color:var(--muted)">'+esc(auxTxt)+'</td>'+cell+'</tr>'; }).join('')
+      +(rows.length?'':'<tr><td colspan="5" style="text-align:center;padding:26px 12px;color:var(--muted)">Ningún código coincide con los filtros actuales'+(hayFiltro?'.<br><button class="btn ghost sm" style="margin-top:10px" onclick="clasifLimpiarTodo()">Limpiar todos los filtros</button>':'.')+'</td></tr>')
       +'</tbody></table></div>'
       +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Es lo que en cada renglón define el centro de costos (proyecto, estructura, mantenimiento módulo/reefer, DTM, rodado, etc.). Sale de "Clasificación de comprobantes" de Tango; solo los Habilitados aparecen para elegir al cargar una OG. La columna Auxiliar sale de cruzar el código directo contra los Auxiliares reales (grupos 02 a 08); "Sin auxiliar" son códigos que solo definen el EERR.</div></div>';
   } else if(DIC_TAB==='opcog'){
@@ -4428,6 +4455,8 @@ async function setClasifCategoria(cod, val){
   paintDic();
 }
 window.setClasifCategoria=setClasifCategoria;
+function clasifLimpiarTodo(){ DIC_COL_FILTRO.clasif={}; DIC_SORT.clasif=null; DIC_CLASIF_AUXGRUPO='Todos'; DIC_SEARCH=''; renderDic(); }
+window.clasifLimpiarTodo=clasifLimpiarTodo;
 function toggleDicAdmin(){ DIC_ADMIN=true; paintDic(); }
 function dicUserView(){ DIC_ADMIN=false; paintDic(); }
 window.toggleDicAdmin=toggleDicAdmin; window.dicUserView=dicUserView;
