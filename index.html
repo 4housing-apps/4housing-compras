@@ -633,7 +633,9 @@ async function sbFetch(path, opts={}, _retry=false){
     throw new Error('Supabase '+res.status+': '+txt);
   }
   if(res.status===204) return null;
-  return res.json();
+  const txt = await res.text().catch(()=> '');
+  if(!txt) return null; // cuerpo vacío (p.ej. sin permiso de SELECT para "return=representation"): no es un error, no hay nada que parsear
+  try{ return JSON.parse(txt); }catch(e){ return null; }
 }
 async function sbFetchAll(pathWithSelect){
   const page=1000; let offset=0, all=[];
@@ -3166,15 +3168,82 @@ CONTA_DB.tipos = (CONTA_DB.tipos||[]).filter(t=>t.cod!=='1');
 function renderDic(){
   const tabs=DIC_TABS.map(t=>'<button class="mtab'+(DIC_TAB===t[0]?' active':'')+'" onclick="setDicTab(\''+t[0]+'\')">'+t[1]+'</button>').join('');
   C().innerHTML='<div class="mtabs">'+tabs+'</div>'
-    +'<div style="position:relative;margin-bottom:12px;max-width:440px">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<div style="position:relative;max-width:440px;flex:1;min-width:220px">'
     +'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;position:absolute;left:11px;top:11px;color:var(--muted)"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>'
     +'<input id="dicSearch" type="text" value="'+esc(DIC_SEARCH)+'" oninput="filterDic(this.value)" placeholder="Buscar…" style="width:100%;border:1px solid var(--line-strong);border-radius:9px;padding:8px 10px 8px 34px;font-size:13px;background:#fff">'
+    +'</div>'
+    +'<button class="btn ghost sm" onclick="exportDicTab()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Exportar a Excel</button>'
     +'</div><div id="dicBox"></div>';
   paintDic();
   const inp=document.getElementById('dicSearch'); if(inp && DIC_SEARCH){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
 }
 function setDicTab(t){ DIC_TAB=t; DIC_SEARCH=''; renderDic(); }
 window.setDicTab=setDicTab;
+function exportDicTab(){
+  if(typeof XLSX==='undefined'){ toast('Necesitás conexión para exportar.'); return; }
+  const q=DIC_SEARCH.trim().toLowerCase();
+  const verConf=canSeeConfid();
+  let aoa=null, sheetName='Datos', fname='';
+  const hoy=new Date().toISOString().slice(0,10);
+  if(DIC_TAB==='proyectos'){
+    let rows=DIC.proyectos; if(q) rows=rows.filter(r=>dicMatch(r,q));
+    aoa=[['Código','Nombre'], ...rows.map(r=>[r.codigo, r.nombre])];
+    sheetName='Proyectos'; fname='Diccionario_Proyectos_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='proveedores'){
+    let rows=DIC.proveedores; if(q) rows=rows.filter(r=>dicMatch(r,q));
+    aoa=[['Código','Razón social','Nombre comercial','CUIT','Provincia cód.','Provincia','Actividad','IVA','Teléfono','Móvil','Email','Web'],
+      ...rows.map(r=>[r.codigo,r.razon,r.comercial,r.cuit,r.provincia_cod,r.provincia,r.actividad,r.iva,r.tel,r.movil,r.email,r.web])];
+    sheetName='Proveedores'; fname='Diccionario_Proveedores_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='articulos'){
+    let rows=DIC.articulos; if(q) rows=rows.filter(r=>dicMatch(r,q));
+    aoa=[['Código','Descripción','Descripción adicional','Sinónimo','N° cuenta','Cuenta'],
+      ...rows.map(r=>[r.codigo,r.descripcion,r.desc_adicional,r.sinonimo,r.cuenta_cod,r.cuenta])];
+    sheetName='Artículos'; fname='Diccionario_Articulos_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='series'){
+    let rows=DIC.series;
+    if(DIC_STIPO!=='Todos') rows=rows.filter(r=>r.tipo===DIC_STIPO);
+    if(q) rows=rows.filter(r=>dicMatch(r,q));
+    aoa=[['Tipo','Serie','Cód. Artículo','Descripción'], ...rows.map(r=>[r.tipo,r.serie,r.cod_art,r.descripcion])];
+    sheetName='Series activas'; fname='Diccionario_SeriesActivas_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='clasif'){
+    let rows=(DIC_CLASIF_TODOS?CLASIF_ALL:CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si'));
+    if(q) rows=rows.filter(r=>((r.cod||'')+' '+(r.desc||'')).toLowerCase().includes(q));
+    aoa=[['Código','Descripción','Habilitado para Compras'], ...rows.map(r=>[r.cod,r.desc,r.habil_comp])];
+    sheetName='Clasificación'; fname='Diccionario_ClasificacionRenglon_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='modulos'){
+    let rows=MODULOS_OPC; if(q) rows=rows.filter(m=>m.toLowerCase().includes(q));
+    aoa=[['Módulo'], ...rows.map(m=>[m])];
+    sheetName='Módulos'; fname='Diccionario_Modulos_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='opcog'){
+    const filt=arr=>{ let rows=arr; if(q) rows=rows.filter(x=>String(x).toLowerCase().includes(q)); return rows; };
+    const wb=XLSX.utils.book_new();
+    [['Costeo',COSTEO_OPC],['Estructura',ESTRUCTURA_OPC],['Postventa',POSTVENTA_OPC],['Condicion de compra',CONDICION_OPC],['Desvio',DESVIO_OPC]].forEach(([nombre,arr])=>{
+      const rows=filt(arr); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[nombre],...rows.map(x=>[x])]), nombre.slice(0,31));
+    });
+    XLSX.writeFile(wb,'Diccionario_OpcionesOG_'+hoy+'.xlsx'); toast('Exportado a Excel'); return;
+  } else if(DIC_TAB==='cuentas'){
+    let ct=(CONTA_DB.cuentas||[]).slice();
+    if(!verConf) ct=ct.filter(r=>!r.confidencial);
+    if(q) ct=ct.filter(r=>((r.cod||'')+' '+(r.desc||'')+' '+(r.clase||'')+' '+(r.tipo||'')).toLowerCase().includes(q));
+    aoa=[['Código','Descripción','Clase','Tipo','Saldo','Usa auxiliares','Habilitado'], ...ct.map(r=>[r.cod,r.desc,r.clase,r.tipo,r.saldo,r.usa_aux,r.habil])];
+    sheetName='Cuentas contables'; fname='Diccionario_CuentasContables_'+hoy+'.xlsx';
+  } else if(DIC_TAB==='aux'){
+    const tipos=(CONTA_DB.tipos||[]).filter(t=>verConf||!t.confidencial);
+    const out=[['Tipo cód.','Tipo descripción','Código auxiliar','Descripción','Habilitado']];
+    tipos.forEach(t=>{
+      const opts=auxOpts(t.cod);
+      const visibles=DIC_AUX_TODOS?opts:opts.filter(o=>String(o.habil||'').toLowerCase()==='si');
+      const f=q?visibles.filter(o=>((o.cod||'')+' '+(o.desc||'')).toLowerCase().includes(q)):visibles;
+      f.forEach(o=>out.push([t.cod,t.desc,o.cod,o.desc,o.habil]));
+    });
+    aoa=out; sheetName='Auxiliares'; fname='Diccionario_Auxiliares_'+hoy+'.xlsx';
+  }
+  if(!aoa){ toast('No hay datos para exportar en esta pestaña.'); return; }
+  const ws=XLSX.utils.aoa_to_sheet(aoa); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0,31));
+  XLSX.writeFile(wb, fname); toast('Exportado a Excel');
+}
+window.exportDicTab=exportDicTab;
 function openNuevoProv(){
   const fld=(id,lbl,ph)=>'<div class="field"><label>'+lbl+'</label><input id="'+id+'" type="text" placeholder="'+(ph||'')+'"></div>';
   openModal('Nuevo proveedor',
