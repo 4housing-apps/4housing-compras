@@ -1718,7 +1718,7 @@ function dicTh(tabKey, label, col){
   const s=DIC_SORT[tabKey];
   const sorting=s && s.col===col;
   const sortArrow=sorting?(s.dir===1?' ▲':' ▼'):'';
-  return '<th style="white-space:nowrap">'
+  return '<th style="white-space:nowrap;font-size:9.5px !important">'
     +'<span style="cursor:pointer;user-select:none" onclick="dicSortToggle(\''+tabKey+'\',\''+col+'\')" title="Ordenar">'+esc(label)+'<span style="font-size:9px;color:'+(sorting?'#1a7a3a;font-weight:900':'var(--muted)')+'">'+sortArrow+'</span></span> '
     +'<span class="dicfbtn" style="cursor:pointer;user-select:none" onclick="openDicColFilter(\''+tabKey+'\',\''+col+'\',event)" title="Filtrar"><span style="font-size:9px;'+(active?'color:#1a7a3a;font-weight:900':'color:var(--muted)')+'">▼</span></span></th>';
 }
@@ -4168,14 +4168,14 @@ function paintDic(){
     const limpiarBtn=Object.keys(DIC_COL_FILTRO.series).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'series\')">Limpiar filtros</button>':'';
     const seriesTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux05_08=_serieAuxIndex(['05','06','07','08']);
-    const nowrap='white-space:nowrap'; // sin ellipsis: el texto se ve completo, la columna se agranda si hace falta
+    const nowrap='white-space:nowrap;font-size:10.5px'; // sin ellipsis, letra chica (mismo tamaño que Cuentas contables)
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Series activas</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+seriesTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
       +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+dicTh('series','Descripción depósito','desc_deposito')+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+'<th>Auxiliar</th></tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
-        +'<td>'+esc(r.desc_deposito||'—')+'</td>'
+        +'<td style="font-size:10.5px">'+esc(r.desc_deposito||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td>'
         +'<td style="'+nowrap+'" title="'+esc(r.descripcion||'')+'">'+esc(r.descripcion||'—')+'</td>'
         +'<td style="'+nowrap+'"><strong>'+esc(r.serie)+'</strong></td>'
@@ -4195,14 +4195,14 @@ function paintDic(){
     const limpiarBtn=Object.keys(DIC_COL_FILTRO.modulos).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'modulos\')">Limpiar filtros</button>':'';
     const modTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux04=_serieAuxIndex(['04']);
-    const nowrap='white-space:nowrap'; // sin ellipsis: el texto se ve completo, la columna se agranda si hace falta
+    const nowrap='white-space:nowrap;font-size:10.5px'; // sin ellipsis, letra chica (mismo tamaño que Cuentas contables)
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Módulos (alquiler)</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+modTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
       +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+dicTh('modulos','Descripción depósito','desc_deposito')+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+'<th>Auxiliar 04</th></tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
-        +'<td>'+esc(r.desc_deposito||'—')+'</td>'
+        +'<td style="font-size:10.5px">'+esc(r.desc_deposito||'—')+'</td>'
         +'<td style="'+nowrap+';color:var(--muted)">'+esc(r.cod_articulo||'—')+'</td>'
         +'<td style="'+nowrap+'" title="'+esc(r.descripcion||'')+'">'+esc(r.descripcion||'—')+'</td>'
         +'<td style="'+nowrap+'"><strong>'+esc(r.serie)+'</strong></td>'
