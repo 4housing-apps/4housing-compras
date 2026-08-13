@@ -3782,7 +3782,7 @@ async function syncClasifAplicar(){
     const payload=todos.map(t=>({cod:t.cod, descripcion:t.descripcion, habil_comp:t.habil_comp, habil_tes:t.habil_tes, habil_vta:t.habil_vta}));
     if(!DEMO_MODE){
       for(let i=0;i<payload.length;i+=500){
-        await sbFetch('/clasif_comprobantes',{method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:JSON.stringify(payload.slice(i,i+500))});
+        await sbFetch('/clasif_comprobantes',{method:'POST', prefer:'resolution=merge-duplicates,return=representation', body:JSON.stringify(payload.slice(i,i+500))});
       }
     }
     // refrescar CLASIF_ALL (todos, habilitados o no) y derivar CLASIF_RENGLON (solo habilitados) para la OG
