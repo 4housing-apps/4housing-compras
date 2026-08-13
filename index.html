@@ -1689,7 +1689,14 @@ function openDicColFilter(tabKey, col, ev){
 }
 function dicColFilterSearch(q){ q=(q||'').toLowerCase(); document.querySelectorAll('#dicfList .dicfitem').forEach(el=>{ el.style.display=el.getAttribute('data-v').toLowerCase().includes(q)?'flex':'none'; }); }
 function dicColFilterToggleAll(ck){ document.querySelectorAll('#dicfList .dicfitem').forEach(el=>{ if(el.style.display!=='none'){ const c=el.querySelector('.dicfchk'); if(c) c.checked=ck; } }); }
-function dicColFilterApply(tabKey,col){ const all=[...document.querySelectorAll('#dicfList .dicfchk')]; const chk=all.filter(c=>c.checked).map(c=>c.value); if(chk.length===all.length){ delete DIC_COL_FILTRO[tabKey][col]; } else { DIC_COL_FILTRO[tabKey][col]=chk; } closeDicColFilter(); paintDic(); }
+function dicColFilterApply(tabKey,col){
+  const all=[...document.querySelectorAll('#dicfList .dicfchk')];
+  const visible=all.filter(c=>{ const it=c.closest('.dicfitem'); return it && it.style.display!=='none'; });
+  const chk=visible.filter(c=>c.checked).map(c=>c.value);
+  if(visible.length===all.length && chk.length===all.length){ delete DIC_COL_FILTRO[tabKey][col]; }
+  else { DIC_COL_FILTRO[tabKey][col]=chk; }
+  closeDicColFilter(); paintDic();
+}
 function dicColFilterClear(tabKey,col){ delete DIC_COL_FILTRO[tabKey][col]; closeDicColFilter(); paintDic(); }
 function dicColFilterClearAll(tabKey){ DIC_COL_FILTRO[tabKey]={}; paintDic(); }
 window.openDicColFilter=openDicColFilter; window.dicColFilterSearch=dicColFilterSearch; window.dicColFilterToggleAll=dicColFilterToggleAll; window.dicColFilterApply=dicColFilterApply; window.dicColFilterClear=dicColFilterClear; window.dicColFilterClearAll=dicColFilterClearAll;
@@ -4142,12 +4149,11 @@ function paintDic(){
     const limpiarBtn=Object.keys(DIC_COL_FILTRO.series).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'series\')">Limpiar filtros</button>':'';
     const seriesTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux05_08=_serieAuxIndex(['05','06','07','08']);
-    const nowrap='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px'; // max-width:1px + colgroup fuerza que respete el ancho de columna
+    const nowrap='white-space:nowrap'; // sin ellipsis: el texto se ve completo, la columna se agranda si hace falta
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Series activas</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+seriesTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
-      +'<div class="dic-scroll"><table class="grid" style="font-size:11px;table-layout:fixed;width:100%">'
-      +'<colgroup><col style="width:52px"><col style="width:130px"><col style="width:90px"><col style="width:210px"><col style="width:120px"><col style="width:120px"><col style="width:75px"><col style="width:80px"><col style="width:95px"><col style="width:90px"></colgroup>'
-      +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+'<th>Descripción depósito</th>'+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+'<th>Auxiliar</th></tr></thead><tbody>'
+      +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
+      +'<thead><tr>'+dicTh('series','Depósito','cod_deposito')+'<th style="min-width:110px">Descripción depósito</th>'+dicTh('series','Artículo','cod_articulo')+dicTh('series','Descripción','descripcion')+dicTh('series','Serie','serie')+dicTh('series','Comentario','comentario')+dicTh('series','Adic. 2','adicional_2')+dicTh('series','Cód. Barras','codigo_barras')+dicTh('series','Adic. 1','adicional_1')+'<th>Auxiliar</th></tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
         +'<td>'+esc(r.desc_deposito||'—')+'</td>'
@@ -4169,12 +4175,11 @@ function paintDic(){
     const limpiarBtn=Object.keys(DIC_COL_FILTRO.modulos).length?'<button class="btn ghost sm" onclick="dicColFilterClearAll(\'modulos\')">Limpiar filtros</button>':'';
     const modTag=SERIES_FROM_SUPABASE?'':demoTag;
     const idxAux04=_serieAuxIndex(['04']);
-    const nowrap='white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px';
+    const nowrap='white-space:nowrap'; // sin ellipsis: el texto se ve completo, la columna se agranda si hace falta
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Módulos (alquiler)</h3><span class="meta">'+rows.length+' de '+base.length+'</span>'+modTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarBtn+syncBtn+'</span></div>'
-      +'<div class="dic-scroll"><table class="grid" style="font-size:11px;table-layout:fixed;width:100%">'
-      +'<colgroup><col style="width:52px"><col style="width:130px"><col style="width:90px"><col style="width:210px"><col style="width:120px"><col style="width:120px"><col style="width:75px"><col style="width:80px"><col style="width:95px"><col style="width:90px"></colgroup>'
-      +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+'<th>Descripción depósito</th>'+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+'<th>Auxiliar 04</th></tr></thead><tbody>'
+      +'<div class="dic-scroll"><table class="grid" style="font-size:9.5px;table-layout:auto;width:100%">'
+      +'<thead><tr>'+dicTh('modulos','Depósito','cod_deposito')+'<th style="min-width:110px">Descripción depósito</th>'+dicTh('modulos','Artículo','cod_articulo')+dicTh('modulos','Descripción','descripcion')+dicTh('modulos','Serie','serie')+dicTh('modulos','Comentario','comentario')+dicTh('modulos','Adic. 2','adicional_2')+dicTh('modulos','Cód. Barras','codigo_barras')+dicTh('modulos','Adic. 1','adicional_1')+'<th>Auxiliar 04</th></tr></thead><tbody>'
       +rows.slice(0,500).map(r=>'<tr>'
         +'<td style="'+nowrap+'">'+esc(r.cod_deposito||'—')+'</td>'
         +'<td>'+esc(r.desc_deposito||'—')+'</td>'
