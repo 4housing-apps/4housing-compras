@@ -3286,20 +3286,22 @@ function exportDicTab(){
     aoa=[['Código','Nombre'], ...rows.map(r=>[r.codigo, r.nombre])];
     sheetName='Proyectos'; fname='Diccionario_Proyectos_'+hoy+'.xlsx';
   } else if(DIC_TAB==='proveedores'){
-    let rows=DIC.proveedores; if(q) rows=rows.filter(r=>dicMatch(r,q));
+    let rows=DIC.proveedores.filter(r=>dicRowPass('proveedores',r)); if(q) rows=rows.filter(r=>dicMatch(r,q)); rows=dicApplySort('proveedores',rows);
     aoa=[['Código','Razón social','Nombre comercial','CUIT','Provincia cód.','Provincia','Actividad','IVA','Teléfono','Móvil','Email','Web'],
       ...rows.map(r=>[r.codigo,r.razon,r.comercial,r.cuit,r.provincia_cod,r.provincia,r.actividad,r.iva,r.tel,r.movil,r.email,r.web])];
     sheetName='Proveedores'; fname='Diccionario_Proveedores_'+hoy+'.xlsx';
   } else if(DIC_TAB==='articulos'){
-    let rows=DIC.articulos; if(q) rows=rows.filter(r=>dicMatch(r,q));
+    let rows=DIC.articulos.filter(r=>dicRowPass('articulos',r)); if(q) rows=rows.filter(r=>dicMatch(r,q)); rows=dicApplySort('articulos',rows);
     aoa=[['Código','Descripción','Descripción adicional','Sinónimo','N° cuenta','Cuenta'],
       ...rows.map(r=>[r.codigo,r.descripcion,r.desc_adicional,r.sinonimo,r.cuenta_cod,r.cuenta])];
     sheetName='Artículos'; fname='Diccionario_Articulos_'+hoy+'.xlsx';
   } else if(DIC_TAB==='series'){
+    _enrichSeries('otros');
     let rows=SERIES_ACTIVAS.filter(r=>r.familia==='otros').filter(r=>dicRowPass('series',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
-    aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Partida','N° Despacho'],
-      ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r.partida,r.numero_despacho])];
+    rows=dicApplySort('series',rows);
+    aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Clasificación','Auxiliar','Partida','N° Despacho'],
+      ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r._clasif||'—',r._aux||'—',r.partida,r.numero_despacho])];
     sheetName='Series activas'; fname='Diccionario_SeriesActivas_'+hoy+'.xlsx';
   } else if(DIC_TAB==='clasif'){
     const idxAuxCod=_clasifCodigoAGrupos();
@@ -3309,16 +3311,20 @@ function exportDicTab(){
         return DIC_CLASIF_AUXGRUPO==='Sin auxiliar'?gs.length===0:gs.includes(DIC_CLASIF_AUXGRUPO); });
     }
     if(q) rows=rows.filter(r=>((r.cod||'')+' '+(r.desc||'')).toLowerCase().includes(q));
-    aoa=[['Código','Descripción','Habilitado para Compras','Auxiliar'], ...rows.map(r=>{
+    rows=rows.filter(r=>dicRowPass('clasif',r));
+    rows = DIC_SORT.clasif ? dicApplySort('clasif', rows) : rows.slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
+    aoa=[['Código','Descripción','Categoría','Auxiliar','Habilitado para Compras'], ...rows.map(r=>{
       const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
-      return [r.cod,r.desc,r.habil_comp, gs.length?gs.map(g=>'Aux '+g).join(' / '):'—'];
+      return [r.cod,r.desc,r.categoria||'', gs.length?gs.map(g=>'Aux '+g).join(' / '):'—', r.habil_comp];
     })];
     sheetName='Clasificación'; fname='Diccionario_ClasificacionRenglon_'+hoy+'.xlsx';
   } else if(DIC_TAB==='modulos'){
+    _enrichSeries('modulo');
     let rows=SERIES_ACTIVAS.filter(r=>r.familia==='modulo').filter(r=>dicRowPass('modulos',r));
     if(q) rows=rows.filter(r=>dicMatch(r,q));
-    aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Partida','N° Despacho'],
-      ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r.partida,r.numero_despacho])];
+    rows=dicApplySort('modulos',rows);
+    aoa=[['Cód. Depósito','Descripción depósito','Cód. Artículo','Descripción','Serie','Comentario','Adicional 2','Código de Barras','Adicional 1','Auxiliar 04','Partida','N° Despacho'],
+      ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r._aux||'—',r.partida,r.numero_despacho])];
     sheetName='Módulos'; fname='Diccionario_Modulos_'+hoy+'.xlsx';
   } else if(DIC_TAB==='opcog'){
     const filt=arr=>{ let rows=arr; if(q) rows=rows.filter(x=>String(x).toLowerCase().includes(q)); return rows; };
@@ -3331,7 +3337,9 @@ function exportDicTab(){
     let ct=(CONTA_DB.cuentas||[]).slice();
     if(!verConf) ct=ct.filter(r=>!r.confidencial);
     if(q) ct=ct.filter(r=>((r.cod||'')+' '+(r.desc||'')+' '+(r.clase||'')+' '+(r.tipo||'')).toLowerCase().includes(q));
-    aoa=[['Código','Descripción','Clase','Tipo','Saldo','Usa auxiliares','Habilitado'], ...ct.map(r=>[r.cod,r.desc,r.clase,r.tipo,r.saldo,r.usa_aux,r.habil])];
+    ct=ct.filter(r=>dicRowPass('cuentas',r)); ct=dicApplySort('cuentas',ct);
+    const hdrCt=['Código','Descripción','Clase','Tipo','Saldo','Usa auxiliares','Habilitado'].concat(verConf?['Confidencial']:[]);
+    aoa=[hdrCt, ...ct.map(r=>{ const base=[r.cod,r.desc,r.clase,r.tipo,r.saldo,r.usa_aux,r.habil]; if(verConf) base.push(r.confidencial?'Sí':'No'); return base; })];
     sheetName='Cuentas contables'; fname='Diccionario_CuentasContables_'+hoy+'.xlsx';
   } else if(DIC_TAB==='aux'){
     const tipos=(CONTA_DB.tipos||[]).filter(t=>verConf||!t.confidencial);
