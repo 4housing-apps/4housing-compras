@@ -3830,6 +3830,7 @@ window.syncCtaAplicar=syncCtaAplicar;
 
 /* ===== Sincronizar CLASIFICACIÓN DE COMPROBANTES con Tango (hasta 3 bases) — alimenta Clasificación renglón ===== */
 let SYNC_CLASIF=null;
+let SYNC_CLASIF_IMP=null; // estado del importador de archivo curado (Código/Descripción/Habilitado/Categoría)
 function openSyncClasif(){
   if(!ROLE.admin){ toast('Solo un administrador puede sincronizar clasificación.'); return; }
   SYNC_CLASIF=null;
@@ -4276,6 +4277,7 @@ function paintDic(){
     rows=rows.filter(r=>dicRowPass('clasif',r));
     rows = DIC_SORT.clasif ? dicApplySort('clasif', rows) : rows.slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
     const syncClasBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncClasif()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
+    const importClasBtn=ROLE.admin?'<button class="btn ghost sm" onclick="openImportClasif()">Importar archivo</button>':'';
     const hayFiltro = Object.keys(DIC_COL_FILTRO.clasif).length || DIC_CLASIF_AUXGRUPO!=='Todos' || !!q;
     const limpiarClasBtn=hayFiltro?'<button class="btn ghost sm" onclick="clasifLimpiarTodo()">Limpiar filtros</button>':'';
     const filtroBtn='<button class="btn ghost sm" onclick="setDicClasifTodos('+(!DIC_CLASIF_TODOS)+')">'+(DIC_CLASIF_TODOS?'Mostrar solo habilitados':'Mostrar todos (incluye inhabilitados)')+'</button>';
@@ -4285,7 +4287,7 @@ function paintDic(){
     const habilCol=ROLE.admin?'<th style="text-align:center;width:80px">Habil.</th>':'<th style="width:60px">Habil.</th>';
     const clasifTag=CLASIF_FROM_SUPABASE?'':demoTag;
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Clasificación de renglón</h3><span class="meta">'+rows.length+' de '+CLASIF_ALL.length+'</span>'+clasifTag
-      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarClasBtn+grupoSel+filtroBtn+syncClasBtn+'</span></div>'
+      +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarClasBtn+grupoSel+filtroBtn+importClasBtn+syncClasBtn+'</span></div>'
       +'<div class="dic-scroll"><table class="grid"><thead><tr>'+dicTh('clasif','Código','cod')+dicTh('clasif','Descripción','desc')+dicTh('clasif','Categoría','categoria')+'<th>Auxiliar</th>'+habilCol+'</tr></thead><tbody>'
       +rows.map(r=>{ const si=String(r.habil_comp||'').toLowerCase()==='si';
         const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
@@ -4457,6 +4459,126 @@ async function setClasifCategoria(cod, val){
 window.setClasifCategoria=setClasifCategoria;
 function clasifLimpiarTodo(){ DIC_COL_FILTRO.clasif={}; DIC_SORT.clasif=null; DIC_CLASIF_AUXGRUPO='Todos'; DIC_SEARCH=''; renderDic(); }
 window.clasifLimpiarTodo=clasifLimpiarTodo;
+
+function openImportClasif(){
+  if(!ROLE.admin){ toast('Solo un administrador puede importar.'); return; }
+  SYNC_CLASIF_IMP=null;
+  const body='<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Subí tu archivo curado de Clasificación (columnas <strong>Código</strong>, <strong>Descripción</strong>, <strong>Habilitado para Compras</strong> y la <strong>Categoría</strong> en la 4ª columna). Lo comparo contra las <strong>'+(CLASIF_ALL||[]).length+'</strong> que tenés cargadas y te muestro qué se agrega, qué cambia y qué se borraría. <strong>No escribe ni borra nada hasta que confirmes.</strong></div>'
+    +'<div class="field"><label>Archivo de Clasificación (.xlsx) *</label><input id="impcl_file" type="file" accept=".xlsx,.xls"></div>'
+    +'<div id="impclMsg" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px"></div>'
+    +'<div id="impclReport" style="margin-top:12px"></div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
+    +'<button class="btn ghost" id="impclAnalizarBtn" onclick="importClasifAnalizar()">Analizar</button>'
+    +'<button class="btn" id="impclAplicarBtn" onclick="importClasifAplicar()" disabled style="opacity:.5">Aplicar</button>';
+  openModal('Importar Clasificación desde archivo (con categorías)', body, foot, 'xwide');
+}
+window.openImportClasif=openImportClasif;
+
+async function importClasifAnalizar(){
+  const f=((document.getElementById('impcl_file')||{}).files||[])[0];
+  const msg=document.getElementById('impclMsg');
+  const setErr=t=>{ msg.style.color='#b3261e'; msg.textContent=t; };
+  if(!f){ setErr('Elegí un archivo.'); return; }
+  msg.style.color='var(--muted)'; msg.textContent='Leyendo '+f.name+'…';
+  try{
+    const wb=await _syncReadWb(f);
+    const rows=_syncSheetRows(wb, h=>_syncIdx(h,'Código','Codigo')>=0);
+    if(!rows) throw new Error('No encontré la columna "Código" en ninguna hoja.');
+    const H=rows[0];
+    const iCod=_syncIdx(H,'Código','Codigo'), iDesc=_syncIdx(H,'Descripción','Descripcion'), iHab=_syncIdx(H,'Habilitado para Compras','Habilitado');
+    let iCat=_syncIdx(H,'Categoría','Categoria','Clasificación (tipo)','Tipo'); let catCol='columna "Categoría"';
+    const maxCols=Math.max(...rows.map(r=>r.length));
+    if(iCat<0){ if(maxCols>=4){ iCat=3; catCol='4ª columna (sin encabezado)'; } else { catCol='no detectada'; } }
+    const fileMap={}, catCount={};
+    for(let i=1;i<rows.length;i++){
+      const c=_syncNorm(rows[i][iCod]).toUpperCase(); if(!c) continue;
+      const cat= iCat>=0 ? _syncNorm(rows[i][iCat]).toUpperCase() : '';
+      fileMap[c]={ cod:c, descripcion:iDesc>=0?_syncNorm(rows[i][iDesc]):'', habil_comp:iHab>=0?_syncNorm(rows[i][iHab]):'', categoria:cat };
+      const key=cat||'(sin categoría)'; catCount[key]=(catCount[key]||0)+1;
+    }
+    const cur={}; (CLASIF_ALL||[]).forEach(r=>{ cur[_syncNorm(r.cod).toUpperCase()]=r; });
+    const nuevos=[], cambios=[], iguales=[], sobrantes=[];
+    Object.keys(fileMap).forEach(c=>{
+      const t=fileMap[c], a=cur[c];
+      if(!a){ nuevos.push(t); return; }
+      const diffs=[];
+      if(t.categoria!==_syncNorm(a.categoria).toUpperCase()) diffs.push(['Categoría', a.categoria||'—', t.categoria||'—']);
+      if(t.habil_comp && _syncNorm(a.habil_comp).toLowerCase()!==t.habil_comp.toLowerCase()) diffs.push(['Habilitado', a.habil_comp||'—', t.habil_comp]);
+      if(t.descripcion && _syncNorm(a.desc)!==t.descripcion) diffs.push(['Descripción', a.desc||'—', t.descripcion]);
+      if(diffs.length) cambios.push({t,diffs}); else iguales.push(t);
+    });
+    Object.keys(cur).forEach(c=>{ if(!fileMap[c]) sobrantes.push(cur[c]); });
+    SYNC_CLASIF_IMP={fileMap, nuevos, cambios, iguales, sobrantes, catCount, catCol, iCatOk:iCat>=0};
+    msg.style.color='var(--muted)';
+    msg.textContent='Archivo: '+Object.keys(fileMap).length+' códigos · Categoría leída de: '+catCol+' · App: '+(CLASIF_ALL||[]).length+'.';
+    const ab=document.getElementById('impclAplicarBtn'); if(ab){ ab.disabled=false; ab.style.opacity=''; ab.textContent='Aplicar'; }
+    renderImportClasifReport();
+  }catch(e){ setErr('Error: '+(e.message||e)); }
+}
+window.importClasifAnalizar=importClasifAnalizar;
+
+function renderImportClasifReport(){
+  const S=SYNC_CLASIF_IMP; if(!S) return;
+  const rep=document.getElementById('impclReport'); if(!rep) return;
+  const catBreak=Object.keys(S.catCount).sort().map(k=>esc(k)+': '+S.catCount[k]).join(' · ');
+  const rowNew=t=>'<div style="padding:4px 8px;border-bottom:1px solid var(--line);font-size:11.5px"><strong>'+esc(t.cod)+'</strong> — '+esc(t.descripcion||'')+' <span style="color:var(--muted)">['+esc(t.categoria||'sin cat')+']</span></div>';
+  const rowChg=m=>'<div style="padding:4px 8px;border-bottom:1px solid var(--line);font-size:11.5px"><strong>'+esc(m.t.cod)+'</strong>: '+m.diffs.map(d=>esc(d[0])+' "'+esc(d[1])+'" → "'+esc(d[2])+'"').join(' · ')+'</div>';
+  const rowDel=t=>'<div style="padding:4px 8px;border-bottom:1px solid var(--line);font-size:11.5px"><strong>'+esc(t.cod)+'</strong> — '+esc(t.desc||'')+' <span style="color:var(--muted)">('+(String(t.habil_comp||'').toLowerCase()==='si'?'habilitado':'inhabilitado')+')</span></div>';
+  const cap=(arr,fn,n)=>arr.slice(0,n).map(fn).join('')+_syncMore(arr.length,n);
+  let html='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Categorías detectadas en el archivo: '+catBreak+(S.iCatOk?'':' <span style="color:#b3261e">— ¡ojo! no detecté una columna de categoría</span>')+'</div>';
+  html+=_syncSection('Altas (códigos nuevos)', S.nuevos.length, cap(S.nuevos,rowNew,300), false);
+  html+=_syncSection('Cambios (categoría / habilitado / descripción)', S.cambios.length, cap(S.cambios,rowChg,300), true);
+  html+=_syncSection('Sin cambios', S.iguales.length, cap(S.iguales,rowNew,80), false);
+  html+='<details open style="margin-bottom:8px;border:1px solid #e6b0a8;border-radius:9px;padding:2px 10px;background:#fdf3f1"><summary style="cursor:pointer;font-weight:600;font-size:13.5px;padding:7px 2px;color:#b3261e">A BORRAR de Supabase — no están en tu archivo ('+S.sobrantes.length+')</summary>'
+    +(S.sobrantes.length?('<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;padding:6px 2px"><input type="checkbox" id="impcl_del" checked> Borrar estas '+S.sobrantes.length+' de Supabase (es permanente)</label><div class="dic-scroll" style="max-height:30vh">'+cap(S.sobrantes,rowDel,400)+'</div>'):'<div style="font-size:12px;color:var(--muted);padding:4px">Ninguna: todo lo que está en Supabase también está en tu archivo.</div>')
+    +'</details>';
+  html+='<div style="font-size:11.5px;color:var(--muted);margin:6px 0">Se van a <strong>agregar/actualizar</strong> '+(S.nuevos.length+S.cambios.length)+' código(s). El borrado es opcional: desmarcá la casilla si no querés borrar.'+(DEMO_MODE?' Estás en modo demo: solo cambia en memoria.':'')+'</div>';
+  rep.innerHTML=html;
+}
+window.renderImportClasifReport=renderImportClasifReport;
+
+async function importClasifAplicar(){
+  if(!ROLE.admin){ toast('Solo un administrador puede aplicar.'); return; }
+  const S=SYNC_CLASIF_IMP; if(!S) return;
+  const upserts=S.nuevos.concat(S.cambios.map(m=>m.t));
+  const delChk=document.getElementById('impcl_del');
+  const doDelete=!!(delChk && delChk.checked) && S.sobrantes.length>0;
+  if(!upserts.length && !doDelete){ toast('No hay nada para aplicar.'); return; }
+  if(!confirm('Se van a agregar/actualizar '+upserts.length+' código(s)'+(doDelete?(' y BORRAR '+S.sobrantes.length+' de Supabase (permanente, no se puede deshacer)'):'')+'.'+(DEMO_MODE?' (demo: solo memoria)':'')+'\n¿Confirmás?')) return;
+  const btn=document.getElementById('impclAplicarBtn'); if(btn){ btn.disabled=true; btn.textContent='Aplicando…'; }
+  try{
+    if(!DEMO_MODE){
+      const payload=upserts.map(t=>({cod:t.cod, descripcion:t.descripcion||t.cod, habil_comp:t.habil_comp||'No', categoria:t.categoria||null}));
+      for(let i=0;i<payload.length;i+=500){
+        await sbFetch('/clasif_comprobantes',{method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:JSON.stringify(payload.slice(i,i+500))});
+      }
+      if(doDelete){
+        const cods=S.sobrantes.map(t=>t.cod);
+        for(let i=0;i<cods.length;i+=80){
+          const chunk=cods.slice(i,i+80).map(c=>encodeURIComponent(c)).join(',');
+          await sbFetch('/clasif_comprobantes?cod=in.('+chunk+')',{method:'DELETE', prefer:'return=minimal'});
+        }
+      }
+    }
+    const mapAll={}; (CLASIF_ALL||[]).forEach(r=>{ mapAll[_syncNorm(r.cod).toUpperCase()]=r; });
+    upserts.forEach(t=>{ const k=t.cod, prev=mapAll[k]; mapAll[k]={cod:t.cod, desc:t.descripcion||(prev&&prev.desc)||t.cod, habil_comp:t.habil_comp||(prev&&prev.habil_comp)||'No', categoria:t.categoria||(prev&&prev.categoria)||''}; });
+    if(doDelete) S.sobrantes.forEach(t=>{ delete mapAll[_syncNorm(t.cod).toUpperCase()]; });
+    CLASIF_ALL.length=0; Object.values(mapAll).sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true})).forEach(r=>CLASIF_ALL.push(r));
+    const habil=CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si').map(r=>({codigo:r.cod, desc:r.desc}));
+    CLASIF_RENGLON.length=0; habil.forEach(r=>CLASIF_RENGLON.push(r));
+    CLASIF_FROM_SUPABASE=true;
+    closeModal();
+    toast('Importado: '+upserts.length+' agregados/actualizados'+(doDelete?(' · '+S.sobrantes.length+' borrados'):'')+(DEMO_MODE?' (demo)':''));
+    SYNC_CLASIF_IMP=null;
+    renderDic();
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='Aplicar'; }
+    const em=String(e.message||e);
+    if(/categoria/i.test(em)) toast('Parece que falta la columna "categoria" en Supabase. Corré: alter table clasif_comprobantes add column if not exists categoria text;');
+    else toast('Error al aplicar: '+em);
+  }
+}
+window.importClasifAplicar=importClasifAplicar;
 function toggleDicAdmin(){ DIC_ADMIN=true; paintDic(); }
 function dicUserView(){ DIC_ADMIN=false; paintDic(); }
 window.toggleDicAdmin=toggleDicAdmin; window.dicUserView=dicUserView;
