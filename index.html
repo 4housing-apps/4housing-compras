@@ -3854,6 +3854,9 @@ window.openSyncClasif=openSyncClasif;
 
 const _SYNC_CLASIF_CAMPOS=['descripcion','habil_comp','habil_tes','habil_vta'];
 
+function syncClasifSetCat(cod, val){ if(!SYNC_CLASIF) return; SYNC_CLASIF.catSel=SYNC_CLASIF.catSel||{}; if(val) SYNC_CLASIF.catSel[cod]=val; else delete SYNC_CLASIF.catSel[cod]; }
+window.syncClasifSetCat=syncClasifSetCat;
+
 async function syncClasifAnalizar(){
   const files=Array.from((document.getElementById('syncl_files').files)||[]);
   const msg=document.getElementById('synclMsg');
@@ -3903,9 +3906,17 @@ async function syncClasifAnalizar(){
       if(t.habil_comp && _syncNorm(a.habil_comp)!==t.habil_comp) diffs.push(['Habilitado para Compras', a.habil_comp||'', t.habil_comp]);
       if(diffs.length) modificados.push({t,diffs});
     });
-    SYNC_CLASIF={nuevos, modificados, conflictos, totTango:allCods.size, resoluciones:{}};
+    // cobertura por base (en cuántos informes aparece cada código) y faltantes (habilitadas en la app que no vienen en ningún informe)
+    const fileNames=fuentes.map(f=>f.name);
+    const coverage={}; allCods.forEach(c=>{ coverage[c]=fuentes.filter(fu=>fu.map[c]).map(fu=>fu.name); });
+    const parciales = fuentes.length>=2 ? [...allCods].filter(c=>coverage[c].length<fuentes.length).sort().map(c=>{
+        const any=fuentes.find(fu=>fu.map[c]);
+        return {cod:c, desc:(any&&any.map[c].descripcion)||'', en:coverage[c], falta:fileNames.filter(n=>!coverage[c].includes(n))};
+      }) : [];
+    const faltantes=(CLASIF_ALL||[]).filter(r=>String(r.habil_comp||'').toLowerCase()==='si' && !allCods.has(_syncNorm(r.cod)));
+    SYNC_CLASIF={nuevos, modificados, conflictos, totTango:allCods.size, resoluciones:{}, catSel:{}, faltantes, parciales, nFiles:fuentes.length, fileNames};
     msg.style.color='var(--muted)';
-    msg.textContent='Tango ('+fuentes.length+' archivo(s)): '+SYNC_CLASIF.totTango+' códigos · App (total conocidos): '+(CLASIF_ALL||[]).length+'.';
+    msg.textContent='Tango ('+fuentes.length+' archivo(s)): '+SYNC_CLASIF.totTango+' códigos · App: '+(CLASIF_ALL||[]).length+' · Faltantes: '+faltantes.length+(fuentes.length>=2?(' · No en las '+fuentes.length+': '+parciales.length):'')+'.';
     renderSyncClasifReport();
   }catch(e){ setErr('Error: '+(e.message||e)); }
 }
@@ -3927,10 +3938,14 @@ function renderSyncClasifReport(){
     + b(R.nuevos.length,'nuevos o recién habilitados','b-verde')
     + b(R.modificados.length,'con descripción distinta','b-ambar')
     + b(R.conflictos.length,'conflicto entre bases'+(R.conflictos.length?' ('+nResueltos+' resuelto/s)':''),R.conflictos.length?'b-rojo':'b-gris')
+    + b((R.faltantes||[]).length,'habilitadas en app sin informe',((R.faltantes||[]).length?'b-ambar':'b-gris'))
+    + (R.nFiles>=2 ? b((R.parciales||[]).length,'no están en las '+R.nFiles+' bases',((R.parciales||[]).length?'b-rojo':'b-gris')) : '')
     + '</div>';
-  h+=_syncSection('Nuevos / recién habilitados para Compras', R.nuevos.length,
-     '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Compras</th><th>Tesorería</th><th>Ventas</th></tr></thead><tbody>'
-     + R.nuevos.slice(0,400).map(t=>'<tr><td><strong>'+esc(t.cod)+'</strong></td><td>'+esc(t.descripcion)+'</td><td style="font-size:12px">'+esc(t.habil_comp||'—')+'</td><td style="font-size:12px">'+esc(t.habil_tes||'—')+'</td><td style="font-size:12px">'+esc(t.habil_vta||'—')+'</td></tr>').join('')
+  h+=_syncSection('Nuevos / recién habilitados — categorizalos', R.nuevos.length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Categoría</th><th>Compras</th></tr></thead><tbody>'
+     + R.nuevos.slice(0,400).map(t=>{ const sel=(R.catSel&&R.catSel[t.cod])||'';
+        const opts='<option value=""'+(sel===''?' selected':'')+'>— elegir —</option>'+CLASIF_CATEGORIAS.map(c=>'<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join('');
+        return '<tr><td><strong>'+esc(t.cod)+'</strong></td><td>'+esc(t.descripcion)+'</td><td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:2px 4px" onchange="syncClasifSetCat(\''+esc(t.cod)+'\',this.value)">'+opts+'</select></td><td style="font-size:12px">'+esc(t.habil_comp||'—')+'</td></tr>'; }).join('')
      + '</tbody></table>'+_syncMore(R.nuevos.length,400), true);
   h+=_syncSection('Descripción distinta a la que tenías', R.modificados.length,
      '<table class="grid"><thead><tr><th>Código</th><th>Antes (app)</th><th>Ahora (Tango)</th></tr></thead><tbody>'
@@ -3944,6 +3959,16 @@ function renderSyncClasifReport(){
   }).join('');
   h+=_syncSection('Conflicto entre bases — mismo código, datos distintos. Elegí cuál vale en cada caso.', R.conflictos.length,
      '<table class="grid"><thead><tr><th>Código</th><th>Elegir</th></tr></thead><tbody>'+confRows+'</tbody></table>', R.conflictos.length>0);
+  h+=_syncSection('Habilitadas en la app que NO vienen en los informes — revisá si hay que inhabilitarlas', (R.faltantes||[]).length,
+     '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Categoría (app)</th></tr></thead><tbody>'
+     + (R.faltantes||[]).slice(0,400).map(r=>'<tr><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc||'—')+'</td><td style="font-size:11.5px;color:var(--muted)">'+esc(r.categoria||'—')+'</td></tr>').join('')
+     + '</tbody></table>'+_syncMore((R.faltantes||[]).length,400), (R.faltantes||[]).length>0);
+  if(R.nFiles>=2){
+    h+=_syncSection('Cobertura por base — códigos que NO están en los '+R.nFiles+' informes (alineá las empresas)', (R.parciales||[]).length,
+       '<table class="grid"><thead><tr><th>Código</th><th>Descripción</th><th>Está en</th><th>Falta en</th></tr></thead><tbody>'
+       + (R.parciales||[]).slice(0,400).map(p=>'<tr><td><strong>'+esc(p.cod)+'</strong></td><td style="font-size:11.5px">'+esc(p.desc||'—')+'</td><td style="font-size:11px;color:#1a7a3a">'+esc(p.en.join(', '))+'</td><td style="font-size:11px;color:#b3261e">'+esc(p.falta.join(', '))+'</td></tr>').join('')
+       + '</tbody></table>'+_syncMore((R.parciales||[]).length,400), (R.parciales||[]).length>0);
+  }
   box.innerHTML=h;
   const canApply=R.nuevos.length||R.modificados.length||nResueltos;
   document.getElementById('modalFoot').innerHTML='<button class="btn ghost" onclick="closeModal()">Cerrar</button>'
@@ -3955,6 +3980,7 @@ async function syncClasifAplicar(){
   if(!ROLE.admin){ toast('Solo un administrador puede aplicar cambios.'); return; }
   if(!SYNC_CLASIF) return;
   const {nuevos, modificados, conflictos, resoluciones}=SYNC_CLASIF;
+  const catSel=SYNC_CLASIF.catSel||{};
   const confResueltos=conflictos.filter(cf=>resoluciones[cf.cod]!==undefined).map(cf=>cf.opciones[resoluciones[cf.cod]].rec);
   const todos=nuevos.concat(modificados.map(m=>m.t)).concat(confResueltos);
   if(!todos.length){ toast('No hay cambios para aplicar.'); return; }
@@ -3967,10 +3993,15 @@ async function syncClasifAplicar(){
       for(let i=0;i<payload.length;i+=500){
         await sbFetch('/clasif_comprobantes',{method:'POST', prefer:'resolution=merge-duplicates,return=representation', body:JSON.stringify(payload.slice(i,i+500))});
       }
+      const conCat=nuevos.filter(t=>catSel[t.cod]);
+      if(conCat.length){
+        try{ for(const t of conCat){ await sbFetch('/clasif_comprobantes?cod=eq.'+encodeURIComponent(t.cod),{method:'PATCH',prefer:'return=minimal',body:JSON.stringify({categoria:catSel[t.cod]})}); } }
+        catch(e){ toast('Guardé los códigos, pero no las categorías nuevas (¿falta la columna categoria en Supabase?).'); }
+      }
     }
     // refrescar CLASIF_ALL (todos, habilitados o no) y derivar CLASIF_RENGLON (solo habilitados) para la OG
     const mapAll={}; (CLASIF_ALL||[]).forEach(r=>{ mapAll[r.cod]=r; });
-    payload.forEach(p=>{ const prev=mapAll[p.cod]; mapAll[p.cod]={cod:p.cod, desc:p.descripcion||p.cod, habil_comp:p.habil_comp||'No', categoria:(prev&&prev.categoria)||_catDe(p.cod)}; });
+    payload.forEach(p=>{ const prev=mapAll[p.cod]; mapAll[p.cod]={cod:p.cod, desc:p.descripcion||p.cod, habil_comp:p.habil_comp||'No', categoria:catSel[p.cod]||(prev&&prev.categoria)||_catDe(p.cod)}; });
     CLASIF_ALL.length=0; Object.values(mapAll).sort((a,b)=>String(a.cod).localeCompare(String(b.cod))).forEach(r=>CLASIF_ALL.push(r));
     const habilitados=CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si').map(r=>({codigo:r.cod, desc:r.desc}));
     CLASIF_RENGLON.length=0; habilitados.forEach(r=>CLASIF_RENGLON.push(r));
