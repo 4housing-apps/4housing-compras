@@ -1798,6 +1798,7 @@ function ogPendPagoPct(og){ return Math.max(0, ogMaxPagablePct(og)-ogPagadoPct(o
 function ogPagadoMonto(og){ return ogPagadoPct(og)/100*ogTotal(og); }
 function ogPendPagoMonto(og){ return Math.max(0, ogMaxPagable(og)-ogPagadoMonto(og)); }
 const CAJAS={ARS:{cod:'11110079',nombre:'CAJA PESOS PROY'}, USD:{cod:'11110080',nombre:'CAJA DOLARES PROY'}};
+const CAJAS_CONF={ARS:{cod:'11110071',nombre:'CAJA PESOS 2'}, USD:{cod:'11110073',nombre:'CAJA DOLARES 3'}}; // origen confidencial de las reposiciones
 /* Leyenda del asiento: prioridad OP - COD PROVEEDOR - PROYECTO - OG (entra lo que quepa) */
 const LEYENDA_MAX=60; // SUPUESTO: largo máx de leyenda en Tango; confirmar el real con Axoft
 function _leyFit(parts){ parts=(parts||[]).filter(p=>p!=null&&String(p).trim()!==''); let out=''; for(const p of parts){ const cand=out?out+' - '+p:String(p); if(cand.length>LEYENDA_MAX && out) break; out=cand; } return out; }
@@ -1805,7 +1806,9 @@ function _opNumOf(o,opByOg){ if(opByOg&&opByOg[o.id]!=null) return opByOg[o.id];
 function _leyRenglon(o,it,opByOg){ const n=_opNumOf(o,opByOg); return _leyFit([ (n!=null&&n!=='')?('OP '+n):'', o.proveedor_cod||'', (it&&it.centro_costos)||'', 'OG '+(o.numero||'') ]); }
 function _leyCaja(o,opByOg){ const n=_opNumOf(o,opByOg); return _leyFit([ (n!=null&&n!=='')?('OP '+n):'', o.proveedor_cod||'', 'OG '+(o.numero||'') ]); }
 function cajaMovs(mon){ return (mem.pagos||[]).filter(p=>p.moneda_pago===mon && !p.sin_caja); }
-function cajaSaldo(mon){ const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; return ini - cajaMovs(mon).reduce((a,p)=>a+(+p.importe_pago||0),0); }
+function cajaIngresos(mon){ return (mem.ingresos||[]).filter(i=>i.moneda===mon); }
+function cajaIngTot(mon){ return cajaIngresos(mon).reduce((a,i)=>a+(+i.importe||0),0); }
+function cajaSaldo(mon){ const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; return ini + cajaIngTot(mon) - cajaMovs(mon).reduce((a,p)=>a+(+p.importe_pago||0),0); }
 function ogEstado(og){ if(og.anulada) return 'Anulada'; const a=ogAcumPct(og.id); return a>=99.999?'Certificada':(a>0?'En certificación':'Abierta'); }
 function proyNombre(o){ if(o.proyecto_nombre) return o.proyecto_nombre; const p=(typeof DIC!=='undefined'?DIC.proyectos:[]).find(x=>x.codigo===o.proyecto); return p?p.nombre:(o.proyecto||'—'); }
 function clasifDesc(cod){ const c=CLASIF_RENGLON.find(x=>x.codigo===cod); return c?c.desc:(cod||''); }
@@ -2203,12 +2206,12 @@ function ogReportRows(ogs){
 window.ogReportRows=ogReportRows;
 
 /* ============ ASIENTO CONTABLE (formato hoja CAJA) ============
-   Contrapartida: 11110071 CAJA PESOS 2. Empresa: 4Commerce. TIPO: EGRESO.
+   Contrapartida: 11110079 CAJA PESOS PROY / 11110080 CAJA DOLARES PROY. Empresa: 4Commerce. TIPO: EGRESO.
    Una línea de gasto por renglón (cuenta + auxiliares) + una línea de
    contrapartida por OG. Catálogos: CONFIGURACION_TANGO (autoritativo).
    ============================================================== */
 const ASIENTO_COLS=['FECHA','TIPO','ID CUENTA','CUENTA CONTABLE','Aux Req','02 EERR','03 PROYECTO','04 CONT/MOD','05 MANT','06 MU','07 HERR','08 RODADOS','10 SUELDOS','11 IIBB','Cód. Prov.','Proveedor','Legajo','Empleado','SOLP','OG','CONCEPTO','INGRESO $','EGRESO $','MOVIMIENTO $','SALDO $','LEYENDA TANGO','✓ ENV.','N° ASIENTO TANGO','OBSERVACIONES'];
-const CONTRAPARTIDA={cod:'11110071', nombre:'CAJA PESOS 2'};
+const CONTRAPARTIDA={cod:'11110079', nombre:'CAJA PESOS PROY'};
 function auxReqStr(im){ const r=['02']; if(im.aux03)r.push('03'); if(im.aux04)r.push('04'); if(im.aux05)r.push('05'); if(im.aux06)r.push('06'); if(im.aux07)r.push('07'); if(im.aux08)r.push('08'); return r.join(' / '); }
 function asientoRows(ogs, opByOg){
   const rows=[ASIENTO_COLS.slice()];
@@ -2302,8 +2305,8 @@ function renderTesoreria(){
   const tab=TES_TAB;
   const kpis='<div class="kpi-grid">'
     +'<div class="kpi"><div class="kpi-label">A pagar (liberado)</div><div class="kpi-val">'+fmtMoney(totalAPagar)+'</div><div class="kpi-sub">'+cola.length+' OG en cola</div></div>'
-    +'<div class="kpi"><div class="kpi-label">CAJA PESOS 2</div><div class="kpi-val">'+fmtMoney(cajaSaldo('ARS'))+'</div><div class="kpi-sub">saldo actual</div></div>'
-    +'<div class="kpi"><div class="kpi-label">CAJA DOLARES 3</div><div class="kpi-val">US$ '+(cajaSaldo('USD')).toLocaleString('es-AR',{maximumFractionDigits:2})+'</div><div class="kpi-sub">saldo actual</div></div>'
+    +'<div class="kpi"><div class="kpi-label">CAJA PESOS PROY</div><div class="kpi-val">'+fmtMoney(cajaSaldo('ARS'))+'</div><div class="kpi-sub">saldo actual</div></div>'
+    +'<div class="kpi"><div class="kpi-label">CAJA DOLARES PROY</div><div class="kpi-val">US$ '+(cajaSaldo('USD')).toLocaleString('es-AR',{maximumFractionDigits:2})+'</div><div class="kpi-sub">saldo actual</div></div>'
     +'<div class="kpi"><div class="kpi-label">Pagado en el mes ($)</div><div class="kpi-val">'+fmtMoney(pagadoMesArs)+'</div><div class="kpi-sub">CAJA PESOS</div></div>'
     +'</div>';
   const tabs='<div class="mtabs" style="margin:4px 0 14px">'
@@ -2647,7 +2650,7 @@ function openPago(ogId){
     +'<strong>OG '+esc(o.numero)+'</strong> · '+esc(o.proveedor||'')+'<br>Total: '+simbOG+tot.toLocaleString('es-AR')+' ('+(monOG==='USD'?'dólares':'pesos')+') · Certificado: '+ogLiberadoPct(o).toFixed(0)+'% · Ya pagado: '+ogPagadoPct(o).toFixed(0)+'% · <strong>Pagable ahora: '+simbOG+pendMonto.toLocaleString('es-AR',{maximumFractionDigits:2})+' ('+pendPct.toFixed(1).replace('.0','')+'%)</strong>'+antInfo+'</div>'
     +'<div class="frow c2"><div class="field"><label>Importe a pagar ('+(monOG==='USD'?'US$':'$')+', moneda de la OG)</label><input id="pg_imp" type="number" step="0.01" value="'+pendMonto.toFixed(2)+'" oninput="pgCalc()"><div style="font-size:11px;color:var(--muted);margin-top:3px">Máx pendiente: '+simbOG+pendMonto.toLocaleString('es-AR',{maximumFractionDigits:2})+'</div></div>'
     +'<div class="field"><label>Fecha de pago</label><input id="pg_fecha" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div></div>'
-    +'<div class="frow c2"><div class="field"><label>Moneda de pago</label><select id="pg_moneda" onchange="pgCalc()"><option value="ARS"'+(monOG==='ARS'?' selected':'')+'>Pesos (CAJA PESOS 2)</option><option value="USD"'+(monOG==='USD'?' selected':'')+'>Dólares (CAJA DOLARES 3)</option></select></div>'
+    +'<div class="frow c2"><div class="field"><label>Moneda de pago</label><select id="pg_moneda" onchange="pgCalc()"><option value="ARS"'+(monOG==='ARS'?' selected':'')+'>Pesos (CAJA PESOS PROY)</option><option value="USD"'+(monOG==='USD'?' selected':'')+'>Dólares (CAJA DOLARES PROY)</option></select></div>'
     +'<div class="field"><label>Medio de pago</label><select id="pg_medio"><option>Efectivo</option><option>Transferencia</option><option>Cheque</option></select></div></div>'
     +'<div class="field" id="pg_tcField"><label>Tipo de cambio (pesos por USD)</label><input id="pg_tc" type="number" step="0.01" value="'+esc(tc)+'" oninput="pgCalc()"><div style="font-size:11px;color:var(--muted);margin-top:3px">Precargado con el dólar blue venta, editable. Se guarda para tener el equivalente en pesos del pago.</div></div>'
     +'<div id="pg_result" style="background:#eef2e6;border-radius:10px;padding:12px;font-size:13px;margin-top:6px"></div>'
@@ -2718,18 +2721,33 @@ async function confirmDelPago(id){
 window.askDelPago=askDelPago; window.confirmDelPago=confirmDelPago;
 
 function arqueoView(){
-  const card=(mon)=>{ const c=CAJAS[mon]; const ini=(mem.caja&&mem.caja[mon+'_ini'])||0; const movs=cajaMovs(mon);
-    const egresos=movs.reduce((a,p)=>a+(+p.importe_pago||0),0); const saldo=ini-egresos;
+  const card=(mon)=>{ const c=CAJAS[mon]; const cc=CAJAS_CONF[mon]; const ini=(mem.caja&&mem.caja[mon+'_ini'])||0;
+    const pagos=cajaMovs(mon); const ings=cajaIngresos(mon);
+    const egresos=pagos.reduce((a,p)=>a+(+p.importe_pago||0),0);
+    const repuesto=ings.reduce((a,i)=>a+(+i.importe||0),0);
+    const saldo=ini+repuesto-egresos;
     const simb=mon==='USD'?'US$ ':'$ '; const fmt=v=>simb+(+v||0).toLocaleString('es-AR',{maximumFractionDigits:2});
-    const rows=movs.length?movs.slice().sort((a,b)=>(a.fecha<b.fecha?1:-1)).map(p=>'<tr><td>'+esc(fmtDate(p.fecha))+'</td><td>OG '+esc(p.numero)+'</td><td>'+esc(p.medio||'')+'</td><td style="text-align:right;color:var(--bad)">-'+fmt(p.importe_pago).replace(simb,simb)+'</td><td style="text-align:right">'+((canPago()&&p.id!=null)?'<button class="iconbtn del" title="Eliminar pago" onclick="askDelPago('+p.id+')">'+ICO.del+'</button>':'')+'</td></tr>').join(''):'<tr><td colspan="5" style="color:var(--muted)">Sin movimientos</td></tr>';
-    return '<div class="card" style="margin-bottom:16px"><div class="card-h"><h3>'+c.nombre+' <span style="font-size:12px;color:var(--muted);font-weight:400">'+c.cod+'</span></h3></div>'
-      +'<div style="display:flex;gap:24px;flex-wrap:wrap;padding:4px 4px 12px">'
-      +'<div><div style="font-size:11.5px;color:var(--muted)">Saldo inicial</div><input type="number" value="'+ini+'" onchange="setSaldoIni(\''+mon+'\',this.value)" style="border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;width:160px;font-size:14px"></div>'
+    const movs=[].concat(
+      ings.map(i=>({tipo:'ing', fecha:i.fecha, det:'Reposición ← '+cc.cod, medio:i.observaciones||'', imp:+i.importe||0, id:i.id})),
+      pagos.map(p=>({tipo:'pag', fecha:p.fecha, det:'OG '+(p.numero||''), medio:p.medio||'', imp:-(+p.importe_pago||0), id:p.id}))
+    ).sort((a,b)=>(a.fecha<b.fecha?1:-1));
+    const rows=movs.length?movs.map(m=>{
+      const pos=m.imp>=0; const col=pos?'#1a7a3a':'var(--bad)';
+      const acc = m.tipo==='ing'
+        ? '<button class="btn ghost sm" title="Asiento de transferencia (Tango)" onclick="exportAsientoReposicion('+m.id+')">Asiento</button>'+((canPago()&&m.id!=null)?' <button class="iconbtn del" title="Eliminar reposición" onclick="askDelIngreso('+m.id+')">'+ICO.del+'</button>':'')
+        : ((canPago()&&m.id!=null)?'<button class="iconbtn del" title="Eliminar pago" onclick="askDelPago('+m.id+')">'+ICO.del+'</button>':'');
+      return '<tr><td>'+esc(fmtDate(m.fecha))+'</td><td>'+esc(m.det)+'</td><td>'+esc(m.medio)+'</td><td style="text-align:right;color:'+col+'">'+(pos?'+':'-')+fmt(Math.abs(m.imp))+'</td><td style="text-align:right">'+acc+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" style="color:var(--muted)">Sin movimientos</td></tr>';
+    const btnIng = canPago()? '<button class="btn sm" onclick="openIngresoCaja(\''+mon+'\')">+ Ingresar fondos</button>' : '';
+    return '<div class="card" style="margin-bottom:16px"><div class="card-h" style="display:flex;justify-content:space-between;align-items:center"><h3>'+c.nombre+' <span style="font-size:12px;color:var(--muted);font-weight:400">'+c.cod+'</span></h3>'+btnIng+'</div>'
+      +'<div style="display:flex;gap:22px;flex-wrap:wrap;padding:4px 4px 12px">'
+      +'<div><div style="font-size:11.5px;color:var(--muted)">Saldo inicial</div><input type="number" value="'+ini+'" onchange="setSaldoIni(\''+mon+'\',this.value)" style="border:1px solid var(--line-strong);border-radius:8px;padding:6px 8px;width:150px;font-size:14px"></div>'
+      +'<div><div style="font-size:11.5px;color:var(--muted)">Reposiciones</div><div style="font-size:18px;font-weight:700;color:#1a7a3a">+'+fmt(repuesto)+'</div></div>'
       +'<div><div style="font-size:11.5px;color:var(--muted)">Egresos (pagos)</div><div style="font-size:18px;font-weight:700;color:var(--bad)">-'+fmt(egresos)+'</div></div>'
-      +'<div><div style="font-size:11.5px;color:var(--muted)">Saldo actual</div><div style="font-size:18px;font-weight:700">'+fmt(saldo)+'</div></div></div>'
-      +'<table class="grid"><thead><tr><th>Fecha</th><th>Detalle</th><th>Medio</th><th style="text-align:right">Importe</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+      +'<div><div style="font-size:11.5px;color:var(--muted)">Saldo disponible</div><div style="font-size:18px;font-weight:700">'+fmt(saldo)+'</div></div></div>'
+      +'<table class="grid"><thead><tr><th>Fecha</th><th>Detalle</th><th>Medio / motivo</th><th style="text-align:right">Importe</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
   };
-  return '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">El saldo inicial lo cargás una vez; de ahí corre solo con los pagos registrados.</div>'+card('ARS')+card('USD');
+  return '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Saldo disponible de cada caja PROY = saldo inicial + reposiciones − pagos. Las reposiciones se cargan desde la caja confidencial y generan su asiento de transferencia para Tango.</div>'+card('ARS')+card('USD');
 }
 async function setSaldoIni(mon,val){
   mem.caja=mem.caja||{}; mem.caja[mon+'_ini']=+val||0;
@@ -2737,6 +2755,89 @@ async function setSaldoIni(mon,val){
   renderTesoreria();
 }
 window.setSaldoIni=setSaldoIni;
+
+function openIngresoCaja(mon){
+  if(!canPago()){ toast('Solo Tesorería/Admin puede ingresar fondos.'); return; }
+  mon = (mon==='USD')?'USD':'ARS';
+  const cc=CAJAS_CONF[mon], cp=CAJAS[mon];
+  const hoy=new Date().toISOString().slice(0,10);
+  const body='<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Reposición de fondos a <strong>'+esc(cp.nombre)+'</strong> ('+cp.cod+'), tomados de <strong>'+esc(cc.nombre)+'</strong> ('+cc.cod+').</div>'
+    +'<div class="frow c2"><div class="field"><label>Fecha *</label><input id="ing_fecha" type="date" value="'+hoy+'"></div>'
+    +'<div class="field"><label>Moneda</label><select id="ing_moneda" onchange="ingCajaOrigen()"><option value="ARS"'+(mon==='ARS'?' selected':'')+'>Pesos</option><option value="USD"'+(mon==='USD'?' selected':'')+'>Dólares</option></select></div></div>'
+    +'<div class="frow c2"><div class="field"><label>Importe *</label><input id="ing_importe" type="number" step="0.01" placeholder="0.00"></div>'
+    +'<div class="field"><label>Origen (caja confidencial)</label><input id="ing_origen" type="text" value="'+cc.cod+' - '+esc(cc.nombre)+'" readonly style="background:#f3f1e8"></div></div>'
+    +'<div class="field"><label>Motivo / observación</label><input id="ing_obs" type="text" placeholder="Ej: reposición para pagos de la semana"></div>'
+    +'<div id="ingMsg" style="font-size:12px;color:#b3261e;min-height:16px;margin-top:6px"></div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" onclick="guardarIngresoCaja()">Registrar ingreso</button>';
+  openModal('Ingresar fondos a caja PROY', body, foot);
+}
+window.openIngresoCaja=openIngresoCaja;
+function ingCajaOrigen(){ const mon=(document.getElementById('ing_moneda')||{}).value||'ARS'; const cc=CAJAS_CONF[mon]||CAJAS_CONF.ARS; const el=document.getElementById('ing_origen'); if(el) el.value=cc.cod+' - '+cc.nombre; }
+window.ingCajaOrigen=ingCajaOrigen;
+
+async function guardarIngresoCaja(){
+  if(!canPago()){ toast('Sin permiso.'); return; }
+  const fecha=((document.getElementById('ing_fecha')||{}).value)||'';
+  const mon=((document.getElementById('ing_moneda')||{}).value)||'ARS';
+  const importe=+((document.getElementById('ing_importe')||{}).value)||0;
+  const obs=(((document.getElementById('ing_obs')||{}).value)||'').trim();
+  const msg=document.getElementById('ingMsg');
+  if(!fecha){ if(msg)msg.textContent='Elegí la fecha.'; return; }
+  if(!(importe>0)){ if(msg)msg.textContent='El importe tiene que ser mayor a 0.'; return; }
+  const rec={fecha, moneda:mon, importe, origen_cod:CAJAS_CONF[mon].cod, destino_cod:CAJAS[mon].cod, observaciones:obs};
+  try{
+    if(DEMO_MODE){ rec.id=Math.max(0,...(mem.ingresos||[]).map(i=>+i.id||0))+1; mem.ingresos=mem.ingresos||[]; mem.ingresos.push(rec); }
+    else { rec.creado_por=(AUTH_USER&&AUTH_USER.email)||''; await sbFetch('/caja_ingresos',{method:'POST',body:JSON.stringify(rec)}); await reloadDB(); }
+    closeModal(); toast('Ingreso registrado: '+(mon==='USD'?'US$ ':'$ ')+importe.toLocaleString('es-AR'));
+    renderTesoreria();
+  }catch(e){
+    const em=String(e.message||e);
+    if(/caja_ingresos/i.test(em)||/relation|does not exist|schema cache|PGRST/i.test(em)){ if(msg)msg.textContent='Falta crear la tabla caja_ingresos en Supabase (te paso el SQL).'; }
+    else if(msg){ msg.textContent='Error: '+em; }
+  }
+}
+window.guardarIngresoCaja=guardarIngresoCaja;
+
+function askDelIngreso(id){ if(!canPago())return; if(confirm('¿Eliminar esta reposición? El saldo disponible se recalcula.')) confirmDelIngreso(id); }
+window.askDelIngreso=askDelIngreso;
+async function confirmDelIngreso(id){
+  try{
+    if(DEMO_MODE){ mem.ingresos=(mem.ingresos||[]).filter(i=>String(i.id)!==String(id)); }
+    else { await sbFetch('/caja_ingresos?id=eq.'+id,{method:'DELETE',prefer:'return=minimal'}); await reloadDB(); }
+    toast('Reposición eliminada'); renderTesoreria();
+  }catch(e){ toast('Error al eliminar: '+(e.message||e)); }
+}
+window.confirmDelIngreso=confirmDelIngreso;
+
+function asientoReposicionSheets(ing){
+  const cabH=['Identificador','Fecha de asiento','Clase de asiento','Código de tipo de asiento','Estado','Código de moneda','Concepto','Observaciones','SOLP','OG','BONOS','Eliminar','ROW_VERSION'];
+  const renH=['Identificador','Nro.','Código de cuenta','Debe','Haber','Fecha de origen','Leyenda','Importe de la unidad adicional','Cantidad','Eliminar','ROW_VERSION'];
+  const cotH=['Identificador','Código de moneda','Código de tipo de cotización','Cotización','Eliminar','ROW_VERSION'];
+  const auxH=['Identificador','Nro. renglón','Código tipo auxiliar','Tipo auxiliar','Código auxiliar','Descripción auxiliar','Porcentaje','Importe','Leyenda'];
+  const id='REP-'+(ing.id||'');
+  const mon=ing.moneda==='USD'?'USD':'ARS'; const monCode=mon==='USD'?'DOL':'PES';
+  let fecha=ing.fecha||''; try{ if(/^\d{4}-\d{2}-\d{2}/.test(ing.fecha)) fecha=new Date(ing.fecha+'T00:00:00'); }catch(e){}
+  const dest=CAJAS[mon], orig=CAJAS_CONF[mon]; const imp=+ing.importe||0;
+  const ley=('Reposición '+dest.nombre+' desde '+orig.nombre+(ing.observaciones?(' - '+ing.observaciones):'')).slice(0,60);
+  const cab=[cabH,[id,fecha,ASIENTO_CLASE,ASIENTO_TIPO_CN,ASIENTO_ESTADO_DEF,monCode,'Reposición de fondos a caja PROY','','','','','No','']];
+  const ren=[renH,
+    [id,1,dest.cod,imp,'',fecha,ley,'','','No',''],   // DEBE: entra a caja PROY
+    [id,2,orig.cod,'',imp,fecha,ley,'','','No','']    // HABER: sale de la caja confidencial
+  ];
+  return {cab,ren,cot:[cotH],aux:[auxH]};
+}
+function exportAsientoReposicion(id){
+  if(typeof XLSX==='undefined'){ toast('Necesitás conexión para exportar.'); return; }
+  const ing=(mem.ingresos||[]).find(i=>String(i.id)===String(id));
+  if(!ing){ toast('No encontré la reposición.'); return; }
+  const s=asientoReposicionSheets(ing); const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.cab), 'Asientos contables');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.ren), 'Renglones');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.cot), 'Cotizaciones');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(s.aux), 'Auxiliares');
+  XLSX.writeFile(wb, 'Asiento_Reposicion_'+id+'.xlsx'); toast('Asiento de transferencia generado');
+}
+window.exportAsientoReposicion=exportAsientoReposicion;
 
 function exportOGExcel(){
   if(typeof XLSX==='undefined'){ toast('Para exportar necesitás conexión a internet (se carga la librería).'); return; }
@@ -4681,6 +4782,7 @@ async function reloadDB(){
     mem.ogs          = await sbFetch('/ogs?select=*&order=id.desc') || [];
     mem.certificados = await sbFetch('/og_certificados?select=*&order=id.asc') || [];
     mem.pagos        = await sbFetch('/pagos?select=*&order=id.asc') || [];
+    mem.ingresos     = await sbFetch('/caja_ingresos?select=*&order=id.asc').catch(()=>[]) || [];
     const cajas      = await sbFetch('/caja?select=*') || [];
     mem.caja = mem.caja || {};
     cajas.forEach(c=>{ if(c.moneda==='ARS') mem.caja.ARS_ini=+c.saldo_inicial||0; if(c.moneda==='USD') mem.caja.USD_ini=+c.saldo_inicial||0; });
@@ -4765,7 +4867,10 @@ window.reloadDB=reloadDB;
     // Tesorería: saldos iniciales de caja y un pago de ejemplo
     mem.caja={ ARS_ini:8000000, USD_ini:5000 };
     mem.pagos=[
-      {id:1, og_id:1, numero:'2000', fecha:'2026-06-18', pct:50, moneda_og:'ARS', moneda_pago:'ARS', tc:null, medio:'Transferencia', caja_cod:'11110071', importe_pago:84000, observaciones:'Pago parcial 50%.'},
+      {id:1, og_id:1, numero:'2000', fecha:'2026-06-18', pct:50, moneda_og:'ARS', moneda_pago:'ARS', tc:null, medio:'Transferencia', caja_cod:'11110079', importe_pago:84000, observaciones:'Pago parcial 50%.'},
+    ];
+    mem.ingresos=[
+      {id:1, fecha:'2026-06-15', moneda:'ARS', importe:2000000, origen_cod:'11110071', destino_cod:'11110079', observaciones:'Reposición inicial de fondos.'},
     ];
     // Inspecciones de ejemplo (ligadas a ítems del Programa)
     mem.inspecciones=[
