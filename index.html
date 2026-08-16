@@ -1835,6 +1835,8 @@ function clasifRule(cod){
   if(fam==='ROD')      return {eerr:'K) ESTRUCTURA',cuenta:'52000032',aux:'rodado',nqnable:true,migrado:false};
   return {eerr:'',cuenta:null,aux:'none',nqnable:false,migrado:false};
 }
+function _ctaLabel(cod){ if(!cod) return ''; const c=(CONTA_DB.cuentas||[]).find(x=>String(x.cod)===String(cod)); return cod+(c&&c.desc?(' - '+c.desc):''); }
+function _clasifApplyRules(){ (typeof CLASIF_ALL!=='undefined'?CLASIF_ALL:[]).forEach(r=>{ const rl=clasifRule(r.cod)||{}; r.eerr=rl.eerr||''; r.cuenta_forzada=rl.cuenta||''; }); }
 // Catálogo autoritativo EERR (CONFIGURACION_TANGO): código → descripción
 const EERR_CAT=[[1,'A) VENTA'],[2,'A) CMV VENTA'],[3,'B) VENTA ALQUILER MODULO'],[4,'B) COSTO ALQUILER MODULO'],[5,'C) VENTA ALQUILER REEFER'],[6,'C) COSTO ALQUILER REEFER'],[7,'G) VENTA SERV TERCERIZADOS'],[8,'G) COSTO SERV TERCERIZADOS'],[9,'I) LOGISTICA INGRESOS'],[10,'I) LOGISTICA EGRESOS'],[11,'J) OTROS INGRESOS'],[12,'D) VENTA ALQUILER VIVIENDA MODULAR'],[13,'D) COSTO ALQUILER VIVIENDA MODULAR'],[20,'K) ESTRUCTURA'],[21,'J) OTROS EGRESOS'],[22,'M) INVERSIONES'],[23,'N) SUELDOS'],[24,'O) IMPUESTOS'],[25,'P) PROVEEDORES'],[26,'Q) AJUSTES CTAS'],[27,'P) PROVEEDORES LDS'],[28,'P) PROVEEDORES GP'],[29,'P) PROVEEDORES PS'],[30,'P) PROVEEDORES MS'],[31,'K) ESTRUCTURA NQN']];
 const EERR_VALUES=EERR_CAT.map(e=>e[1]);
@@ -3405,7 +3407,7 @@ function exportDicTab(){
       ...rows.map(r=>[r.cod_deposito,r.desc_deposito,r.cod_articulo,r.descripcion,r.serie,r.comentario,r.adicional_2,r.codigo_barras,r.adicional_1,r._clasif||'—',r._aux||'—',r.partida,r.numero_despacho])];
     sheetName='Series activas'; fname='Diccionario_SeriesActivas_'+hoy+'.xlsx';
   } else if(DIC_TAB==='clasif'){
-    const idxAuxCod=_clasifCodigoAGrupos();
+    const idxAuxCod=_clasifCodigoAGrupos(); _clasifApplyRules();
     let rows=(DIC_CLASIF_TODOS?CLASIF_ALL:CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si'));
     if(DIC_CLASIF_AUXGRUPO!=='Todos'){
       rows=rows.filter(r=>{ const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
@@ -3414,9 +3416,9 @@ function exportDicTab(){
     if(q) rows=rows.filter(r=>((r.cod||'')+' '+(r.desc||'')).toLowerCase().includes(q));
     rows=rows.filter(r=>dicRowPass('clasif',r));
     rows = DIC_SORT.clasif ? dicApplySort('clasif', rows) : rows.slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
-    aoa=[['Código','Descripción','Categoría','Auxiliar','Habilitado para Compras'], ...rows.map(r=>{
+    aoa=[['Código','Descripción','Categoría','EERR (Aux 02)','Cuenta forzada','Auxiliar','Habilitado para Compras'], ...rows.map(r=>{
       const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
-      return [r.cod,r.desc,r.categoria||'', gs.length?gs.map(g=>'Aux '+g).join(' / '):'—', r.habil_comp];
+      return [r.cod,r.desc,r.categoria||'', eerrFmt(r.eerr||''), _ctaLabel(r.cuenta_forzada||''), gs.length?gs.map(g=>'Aux '+g).join(' / '):'—', r.habil_comp];
     })];
     sheetName='Clasificación'; fname='Diccionario_ClasificacionRenglon_'+hoy+'.xlsx';
   } else if(DIC_TAB==='modulos'){
@@ -4406,6 +4408,7 @@ function paintDic(){
       +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Dónde está cada módulo hoy (stock, cliente, mantenimiento, venta) y su Auxiliar 04 real, cruzado por serie. El selector de Módulo al cargar una OG ya muestra este mismo depósito y excluye los vendidos. Tocá la flechita ▼ de cada columna para filtrar, como en Excel.</div></div>';
   } else if(DIC_TAB==='clasif'){
     const idxAuxCod=_clasifCodigoAGrupos();
+    _clasifApplyRules();
     let rows=(DIC_CLASIF_TODOS?CLASIF_ALL:CLASIF_ALL.filter(r=>String(r.habil_comp||'').toLowerCase()==='si'));
     if(DIC_CLASIF_AUXGRUPO!=='Todos'){
       rows=rows.filter(r=>{
@@ -4428,7 +4431,7 @@ function paintDic(){
     const clasifTag=CLASIF_FROM_SUPABASE?'':demoTag;
     html='<div class="card"><div class="card-h" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h3 style="margin:0">Clasificación de renglón</h3><span class="meta">'+rows.length+' de '+CLASIF_ALL.length+'</span>'+clasifTag
       +'<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center">'+limpiarClasBtn+grupoSel+filtroBtn+importClasBtn+syncClasBtn+'</span></div>'
-      +'<div class="dic-scroll"><table class="grid"><thead><tr>'+dicTh('clasif','Código','cod')+dicTh('clasif','Descripción','desc')+dicTh('clasif','Categoría','categoria')+'<th>Auxiliar</th>'+habilCol+'</tr></thead><tbody>'
+      +'<div class="dic-scroll"><table class="grid"><thead><tr>'+dicTh('clasif','Código','cod')+dicTh('clasif','Descripción','desc')+dicTh('clasif','Categoría','categoria')+dicTh('clasif','EERR (Aux 02)','eerr')+dicTh('clasif','Cuenta forzada','cuenta_forzada')+'<th>Auxiliar</th>'+habilCol+'</tr></thead><tbody>'
       +rows.map(r=>{ const si=String(r.habil_comp||'').toLowerCase()==='si';
         const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
         const auxTxt=gs.length?gs.map(g=>'Aux '+g).join(' / '):'—';
@@ -4440,10 +4443,26 @@ function paintDic(){
               +(catVal&&!CLASIF_CATEGORIAS.includes(catVal)?'<option selected>'+esc(catVal)+'</option>':'')
               +'</select></td>'
           : '<td style="font-size:11px;color:var(--muted)">'+esc(catVal||'—')+'</td>';
+        const eeVal=r.eerr||'';
+        const eeCell=ROLE.admin
+          ? '<td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:3px 5px;max-width:200px" onchange="setClasifEERR(\''+esc(r.cod)+'\',this.value)">'
+              +'<option value=""'+(eeVal===''?' selected':'')+'>— sin EERR —</option>'
+              +EERR_VALUES.map(v=>'<option value="'+esc(v)+'"'+(v===eeVal?' selected':'')+'>'+esc(eerrFmt(v))+'</option>').join('')
+              +(eeVal&&!EERR_VALUES.includes(eeVal)?'<option value="'+esc(eeVal)+'" selected>'+esc(eeVal)+' (revisar)</option>':'')
+              +'</select></td>'
+          : '<td style="font-size:11px;color:var(--muted)">'+esc(eerrFmt(eeVal)||'—')+'</td>';
+        const cfVal=r.cuenta_forzada||'';
+        const cfCell=ROLE.admin
+          ? '<td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:3px 5px;max-width:210px" onchange="setClasifCtaForz(\''+esc(r.cod)+'\',this.value)">'
+              +'<option value=""'+(cfVal===''?' selected':'')+'>— según artículo —</option>'
+              +(CONTA_DB.cuentas||[]).filter(c=>String(c.habil||'').toLowerCase()!=='no').map(c=>'<option value="'+esc(c.cod)+'"'+(String(c.cod)===String(cfVal)?' selected':'')+'>'+esc(c.cod+' - '+(c.desc||''))+'</option>').join('')
+              +(cfVal&&!(CONTA_DB.cuentas||[]).some(c=>String(c.cod)===String(cfVal))?'<option value="'+esc(cfVal)+'" selected>'+esc(cfVal)+'</option>':'')
+              +'</select></td>'
+          : '<td style="font-size:11px;color:var(--muted)">'+esc(_ctaLabel(cfVal)||'—')+'</td>';
         const cell=ROLE.admin?'<td style="text-align:center"><input type="checkbox" '+(si?'checked':'')+' onclick="toggleHabilClasif(\''+esc(r.cod)+'\')"></td>'
                               :'<td style="font-size:11.5px;color:'+(si?'inherit':'var(--muted)')+'">'+(si?'Sí':'No')+'</td>';
-        return '<tr'+(si?'':' style="opacity:.55"')+'><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc)+'</td>'+catCell+'<td style="font-size:11.5px;color:var(--muted)">'+esc(auxTxt)+'</td>'+cell+'</tr>'; }).join('')
-      +(rows.length?'':'<tr><td colspan="5" style="text-align:center;padding:26px 12px;color:var(--muted)">Ningún código coincide con los filtros actuales'+(hayFiltro?'.<br><button class="btn ghost sm" style="margin-top:10px" onclick="clasifLimpiarTodo()">Limpiar todos los filtros</button>':'.')+'</td></tr>')
+        return '<tr'+(si?'':' style="opacity:.55"')+'><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc)+'</td>'+catCell+eeCell+cfCell+'<td style="font-size:11.5px;color:var(--muted)">'+esc(auxTxt)+'</td>'+cell+'</tr>'; }).join('')
+      +(rows.length?'':'<tr><td colspan="7" style="text-align:center;padding:26px 12px;color:var(--muted)">Ningún código coincide con los filtros actuales'+(hayFiltro?'.<br><button class="btn ghost sm" style="margin-top:10px" onclick="clasifLimpiarTodo()">Limpiar todos los filtros</button>':'.')+'</td></tr>')
       +'</tbody></table></div>'
       +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Es lo que en cada renglón define el centro de costos (proyecto, estructura, mantenimiento módulo/reefer, DTM, rodado, etc.). Sale de "Clasificación de comprobantes" de Tango; solo los Habilitados aparecen para elegir al cargar una OG. La columna Auxiliar sale de cruzar el código directo contra los Auxiliares reales (grupos 02 a 08); "Sin auxiliar" son códigos que solo definen el EERR.</div></div>';
   } else if(DIC_TAB==='opcog'){
@@ -4597,6 +4616,29 @@ async function setClasifCategoria(cod, val){
   paintDic();
 }
 window.setClasifCategoria=setClasifCategoria;
+async function _upsertClasifRule(K){
+  const rl=CLASIF_RULES[K]||{};
+  const body={codigo:K, eerr:rl.eerr||null, cuenta_cod:rl.cuenta||null, aux:rl.aux||'none', nqnable:!!rl.nqnable, migrado:!!rl.migrado};
+  await sbFetch('/clasif_renglon',{method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:JSON.stringify(body)});
+}
+async function setClasifEERR(cod, val){
+  if(!ROLE.admin){ toast('Solo un administrador puede cambiar el EERR.'); return; }
+  const K=String(cod||'').toUpperCase().trim();
+  const prev=CLASIF_RULES[K]?{...CLASIF_RULES[K]}:{...clasifRule(cod)};
+  CLASIF_RULES[K]={...prev, eerr:val||''};
+  if(!DEMO_MODE){ try{ await _upsertClasifRule(K); }catch(e){ CLASIF_RULES[K]=prev; toast(/clasif_renglon/i.test(String(e.message||e))?'Falta crear la tabla clasif_renglon en Supabase (te paso el SQL).':'No se pudo guardar el EERR: '+(e.message||e)); paintDic(); return; } }
+  paintDic();
+}
+window.setClasifEERR=setClasifEERR;
+async function setClasifCtaForz(cod, val){
+  if(!ROLE.admin){ toast('Solo un administrador puede cambiar la cuenta.'); return; }
+  const K=String(cod||'').toUpperCase().trim();
+  const prev=CLASIF_RULES[K]?{...CLASIF_RULES[K]}:{...clasifRule(cod)};
+  CLASIF_RULES[K]={...prev, cuenta:val||null};
+  if(!DEMO_MODE){ try{ await _upsertClasifRule(K); }catch(e){ CLASIF_RULES[K]=prev; toast(/clasif_renglon/i.test(String(e.message||e))?'Falta crear la tabla clasif_renglon en Supabase (te paso el SQL).':'No se pudo guardar la cuenta: '+(e.message||e)); paintDic(); return; } }
+  paintDic();
+}
+window.setClasifCtaForz=setClasifCtaForz;
 function clasifLimpiarTodo(){ DIC_COL_FILTRO.clasif={}; DIC_SORT.clasif=null; DIC_CLASIF_AUXGRUPO='Todos'; DIC_SEARCH=''; renderDic(); }
 window.clasifLimpiarTodo=clasifLimpiarTodo;
 
