@@ -244,6 +244,7 @@ table.grid.usub td,table.grid.usub th{padding:6px 11px;font-size:11.5px;}
   <aside class="side">
     <div class="brand">4housing</div>
     <div class="brand-sub">Compras &amp; Operaciones</div>
+    <div class="brand-sub" style="font-size:10px;opacity:.55;margin-top:2px">build 18-08-2026 · fix falta-alta</div>
     <nav id="nav"></nav>
     <div class="sp"></div>
     <div class="data-actions">
@@ -4302,10 +4303,13 @@ function _enrichSeries(familia){
 // Acá la clave es el CÓDIGO directo (no la serie): para clasificación, código de clasificación = código de auxiliar.
 function _clasifCodigoAGrupos(){
   const idx={};
-  ['02','03','04','05','06','07','08'].forEach(g=>{
-    ((CONTA_DB.auxopc&&CONTA_DB.auxopc[g])||[]).forEach(o=>{
+  [['02','2'],['03','3'],['04','4'],['05','5'],['06','6'],['07','7'],['08','8']].forEach(function(p){
+    const g=p[0], k=p[1];
+    ((CONTA_DB.auxopc&&CONTA_DB.auxopc[k])||[]).forEach(o=>{
       const c=String(o.cod||'').trim().toUpperCase(); if(!c) return;
       (idx[c]=idx[c]||[]).push(g);
+      const s=c.replace(/^\d+\)\s*/,'');            // "2) ACOPIO" -> "ACOPIO"
+      if(s && s!==c) (idx[s]=idx[s]||[]).push(g);
     });
   });
   return idx;
