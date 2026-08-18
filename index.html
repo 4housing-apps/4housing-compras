@@ -1845,6 +1845,15 @@ function _clasifApplyRules(){ (typeof CLASIF_ALL!=='undefined'?CLASIF_ALL:[]).fo
 // Cuenta -> tipos de auxiliar que admite (de la hoja CUENTAS). Para proyectos hace falta el 03 (INSTRUCTIVO/PROYECTO).
 const CUENTA_AUXTIPOS={"11110071":["02"],"11110073":["02"],"11110075":["02"],"11110076":["02"],"11110078":["02"],"11110079":["02"],"11110080":["02"],"11110081":["02"],"11220001":["30"],"11220002":["30"],"11540001":["02"],"11600005":["30"],"11600006":["30"],"12400001":["02","03"],"12400002":["02","03"],"12400003":["02","03"],"12400004":["02","03"],"12400005":["02","03"],"12400006":["02","03"],"12400007":["02","03"],"12400008":["02","03"],"12400009":["02","03"],"12400010":["02","03"],"12400011":["02","03"],"12400012":["02","03"],"12400013":["02","03"],"12500001":["02","05"],"12500002":["02","05"],"12501001":["02","05"],"12501002":["02","05"],"12510000":["02","03"],"12510001":["02","05"],"12511001":["02","05"],"12511002":["02","05"],"12520000":["02"],"12520001":["02","06"],"12520002":["02","06"],"12521001":["02","06"],"12521002":["02","06"],"12530000":["02"],"12530001":["02","07"],"12530002":["02","07"],"12531001":["02","07"],"12531002":["02","07"],"12540000":["02"],"12540001":["02","08"],"12540002":["02","08"],"12541001":["02","08"],"12541002":["02","08"],"12550000":["02"],"12550001":["02","08"],"12550002":["02","08"],"12551001":["02","08"],"12551002":["02","05"],"12560000":["02","03"],"12570000":["02","03","04"],"12580000":["02","03","04"],"12590000":["02","03","04"],"12599000":["02","03"],"12600000":["02","03"],"12700000":["02","03","04"],"12701000":["02","03","04"],"21600002":["02"],"21600003":["02"],"21600004":["02"],"21600005":["02"],"21600006":["02"],"21600011":["02"],"21600012":["02"],"21600013":["02"],"21600014":["02"],"21600015":["02"],"21600016":["02"],"41000001":["02","03"],"41000002":["02","04"],"41000003":["02","04"],"41000004":["02","04"],"41000005":["02","04"],"41000007":["02","04"],"41010001":["02","03"],"42000001":["02"],"42000002":["02","03","04"],"43000001":["02","03","04"],"43000002":["02","03","04"],"44000001":["02"],"51000001":["02","03"],"51000002":["02","04"],"51000003":["02","04"],"51000004":["02","03"],"51000005":["02","03"],"51000006":["02","03"],"51000007":["02","03"],"52000001":["02"],"52000002":["02"],"52000003":["02"],"52000004":["02","05"],"52000005":["02"],"52000006":["02","03"],"52000007":["02","03"],"52000008":["02","03"],"52000009":["02","03"],"52000010":["02","03"],"52000011":["02","04"],"52000012":["02","04"],"52000013":["02","04"],"52000014":["02"],"52000015":["02","03"],"52000016":["02","03","05"],"52000017":["02","03","05"],"52000018":["02","03"],"52000019":["02","03","04"],"52000020":["02","04"],"52000031":["02","07"],"52000032":["02","08"],"52000033":["02","06"],"52000034":["02","08"],"52000035":["02","08"],"53000001":["02"],"53000002":["02"],"53000003":["02"],"53000004":["02"],"53000005":["02"],"53000006":["02","03"],"53000007":["02"],"53000010":["02","03"],"54000002":["02"],"54000003":["02","03"],"54000004":["02"],"54000005":["02"],"54000006":["02"],"54000007":["02"],"54000008":["02","03"],"54000009":["02"],"54000010":["02"],"54000011":["02"],"54000012":["02","03"],"54000013":["02"],"54000014":["02"],"54000015":["02","03"],"54000016":["02","03"],"55000001":["02","03"],"55000002":["02"],"55000003":["02","03"],"55000004":["02","03"],"55000005":["02"],"55000006":["02","03"],"55000007":["02"],"55000008":["02"],"55000009":["02","04"],"55000010":["02"],"55000011":["02","03"],"55000012":["02","03"],"55000013":["02","03"],"55000014":["02","03","10"],"55000015":["02","03"],"55000016":["02","03"],"55000017":["02","03"],"55000020":["02"],"56000001":["02","03","10"],"56000002":["02","03","10"],"56000003":["02","03","10"],"56000004":["02","03","10"],"56000005":["02"],"56000006":["02","03","10"],"56000007":["02","03","10"],"56000008":["02","03","10"],"56000009":["02"],"56000010":["02","03","10"],"56000011":["02","03","10"],"56100001":["02","03"],"57000001":["02","03","11"],"57000003":["02","03"],"57000004":["02"],"57000005":["02"],"57000006":["02"],"57000007":["02"],"57000008":["02"],"57000009":["02","03"],"58000001":["02"],"58000002":["02"],"59000001":["02"],"59000011":["02"],"59000012":["02"],"59000099":["02"],"99999999":["02","03"]};
 function cuentaPermiteAux(cod, tipo){ const t=CUENTA_AUXTIPOS[String(cod||'').trim()]; if(!t) return null; return t.includes(String(tipo).padStart(2,'0')); }
+function _auxDeRegla(cod, idx){
+  const rl=clasifRule(cod)||{}; const a=rl.aux||'none';
+  const map={proyecto:'03', modulo:'04', bsuso:'05', mueble:'06', herram:'07', rodado:'08'};
+  const g=map[a]; if(!g) return 'Sin auxiliar';
+  if(a==='modulo') return '04 · según serie del módulo';
+  const K=String(cod||'').toUpperCase().trim();
+  const existe=((idx&&idx[K])||[]).includes(g);
+  return g+' · '+cod+(existe?'':' ⚠ falta alta');
+}
 // Catálogo autoritativo EERR (CONFIGURACION_TANGO): código → descripción
 const EERR_CAT=[[1,'A) VENTA'],[2,'A) CMV VENTA'],[3,'B) VENTA ALQUILER MODULO'],[4,'B) COSTO ALQUILER MODULO'],[5,'C) VENTA ALQUILER REEFER'],[6,'C) COSTO ALQUILER REEFER'],[7,'G) VENTA SERV TERCERIZADOS'],[8,'G) COSTO SERV TERCERIZADOS'],[9,'I) LOGISTICA INGRESOS'],[10,'I) LOGISTICA EGRESOS'],[11,'J) OTROS INGRESOS'],[12,'D) VENTA ALQUILER VIVIENDA MODULAR'],[13,'D) COSTO ALQUILER VIVIENDA MODULAR'],[20,'K) ESTRUCTURA'],[21,'J) OTROS EGRESOS'],[22,'M) INVERSIONES'],[23,'N) SUELDOS'],[24,'O) IMPUESTOS'],[25,'P) PROVEEDORES'],[26,'Q) AJUSTES CTAS'],[27,'P) PROVEEDORES LDS'],[28,'P) PROVEEDORES GP'],[29,'P) PROVEEDORES PS'],[30,'P) PROVEEDORES MS'],[31,'K) ESTRUCTURA NQN']];
 const EERR_VALUES=EERR_CAT.map(e=>e[1]);
@@ -3430,7 +3439,7 @@ function exportDicTab(){
     rows = DIC_SORT.clasif ? dicApplySort('clasif', rows) : rows.slice().sort((a,b)=>String(a.cod).localeCompare(String(b.cod),'es',{numeric:true}));
     aoa=[['Código','Descripción','Categoría','EERR (Aux 02)','Auxiliar','Cuenta forzada','Habilitado para Compras'], ...rows.map(r=>{
       const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
-      return [r.cod,r.desc,r.categoria||'', eerrFmt(r.eerr||''), gs.length?gs.map(g=>'Aux '+g).join(' / '):'—', _ctaLabel(r.cuenta_forzada||''), r.habil_comp];
+      return [r.cod,r.desc,r.categoria||'', eerrFmt(r.eerr||''), _auxDeRegla(r.cod, idxAuxCod), _ctaLabel(r.cuenta_forzada||''), r.habil_comp];
     })];
     sheetName='Clasificación'; fname='Diccionario_ClasificacionRenglon_'+hoy+'.xlsx';
   } else if(DIC_TAB==='modulos'){
@@ -3967,6 +3976,116 @@ function openSyncClasif(){
 }
 window.openSyncClasif=openSyncClasif;
 
+/* ===== Sincronizar AUXILIARES con Tango (hasta 3 bases) ===== */
+let SYNC_AUX=null;
+function openSyncAux(){
+  if(!ROLE.admin){ toast('Solo un administrador puede sincronizar auxiliares.'); return; }
+  SYNC_AUX=null;
+  const body='<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Subí hasta 3 archivos de <strong>"Tipos de auxiliares"</strong> de Tango (uno por empresa). La app lee la solapa <strong>Auxiliares</strong>, toma solo los <strong>Habilitado = Sí</strong>, ignora el Aux 01 (no se usa), une por tipo+código y marca conflictos si un mismo código viene distinto entre archivos o contra lo que ya hay. <strong>Nunca borra</strong> y no escribe nada hasta que toques Aplicar.</div>'
+    +'<div class="field"><label>Tipos de auxiliares — hasta 3 archivos (.xlsx) *</label><input id="synca_files" type="file" accept=".xlsx,.xls" multiple></div>'
+    +'<div id="syncaMsg" style="font-size:12px;color:var(--muted);margin-top:6px;min-height:16px"></div>'
+    +'<div id="syncaReport" style="margin-top:12px"></div>';
+  const foot='<button class="btn ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="syncaApplyBtn" onclick="syncAuxAnalizar()">Analizar</button>';
+  openModal('Sincronizar auxiliares con Tango', body, foot, 'xwide');
+}
+window.openSyncAux=openSyncAux;
+
+async function syncAuxAnalizar(){
+  const inp=document.getElementById('synca_files'); const msg=document.getElementById('syncaMsg');
+  const files=inp&&inp.files?[...inp.files]:[];
+  if(!files.length){ if(msg)msg.textContent='Elegí al menos un archivo.'; return; }
+  if(typeof XLSX==='undefined'){ if(msg)msg.textContent='Necesitás conexión para leer los Excel.'; return; }
+  if(msg)msg.textContent='Leyendo '+files.length+' archivo(s)…';
+  const norm=v=>String(v==null?'':v).trim();
+  const union={}; const fileNames=files.map(f=>f.name);
+  try{
+    for(let fi=0; fi<files.length; fi++){
+      const wb=XLSX.read(await files[fi].arrayBuffer(),{type:'array'});
+      const shName=wb.SheetNames.find(n=>String(n).trim().toLowerCase()==='auxiliares')
+                || wb.SheetNames.find(n=>/auxiliares/i.test(n) && !/tipos|tipo_|subaux/i.test(n))
+                || wb.SheetNames.find(n=>/auxiliar/i.test(n) && !/tipos|tipo_|subaux/i.test(n));
+      if(!shName) continue;
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
+      if(!rows.length) continue;
+      const hdr=rows[0].map(h=>norm(h).toLowerCase());
+      const ci={ tipo:hdr.findIndex(h=>h.includes('tipo')), cod:hdr.findIndex(h=>h==='código auxiliar'||h==='codigo auxiliar'||(h.includes('código')&&!h.includes('tipo'))), desc:hdr.findIndex(h=>h.includes('descrip')), hab:hdr.findIndex(h=>h.includes('habilit')) };
+      for(let r=1;r<rows.length;r++){
+        const row=rows[r]; const tipo=norm(row[ci.tipo]).replace(/^0+(\d)/, '$1').padStart(2,'0');
+        const cod=norm(row[ci.cod]); const desc=norm(row[ci.desc]); const hab=norm(row[ci.hab]);
+        if(!cod||!tipo) continue;
+        if(tipo==='01') continue;                       // Aux 01 no se usa
+        if(hab.toLowerCase()!=='si'&&hab.toLowerCase()!=='sí') continue;  // solo habilitados
+        const tipoNum=String(parseInt(tipo,10));
+        const key=tipoNum+'||'+cod.toUpperCase();
+        const u=union[key]=union[key]||{tipo:tipoNum, cod, descs:new Set(), enArch:new Set()};
+        u.descs.add(desc); u.enArch.add(fileNames[fi]);
+      }
+    }
+    // clasificar vs estado actual (CONTA_DB.auxopc)
+    const curIdx={};
+    Object.keys(CONTA_DB.auxopc||{}).forEach(t=>{ (CONTA_DB.auxopc[t]||[]).forEach(o=>{ curIdx[t+'||'+String(o.cod).toUpperCase()]={desc:o.desc,habil:o.habil}; }); });
+    const altas=[], cambios=[], iguales=[], conflictos=[];
+    Object.values(union).forEach(u=>{
+      const desc=[...u.descs][0]||'';
+      if(u.descs.size>1){ conflictos.push({...u, descsArr:[...u.descs]}); return; }
+      const cur=curIdx[u.tipo+'||'+u.cod.toUpperCase()];
+      if(!cur) altas.push({tipo:u.tipo, cod:u.cod, desc});
+      else if(norm(cur.desc)!==desc) cambios.push({tipo:u.tipo, cod:u.cod, desc, descAnt:cur.desc});
+      else iguales.push(1);
+    });
+    SYNC_AUX={altas, cambios, iguales:iguales.length, conflictos, fileNames};
+    renderSyncAuxReport();
+  }catch(e){ if(msg)msg.textContent='Error al leer: '+(e.message||e); }
+}
+window.syncAuxAnalizar=syncAuxAnalizar;
+
+function renderSyncAuxReport(){
+  const box=document.getElementById('syncaReport'); const msg=document.getElementById('syncaMsg'); if(!box) return;
+  const s=SYNC_AUX; if(!s){ box.innerHTML=''; return; }
+  if(msg)msg.textContent='Leídos: '+s.fileNames.join(' · ');
+  const tipoNom=t=>{ const x=(CONTA_DB.tipos||[]).find(y=>String(y.cod)===String(t)); return t+(x?' '+x.desc:''); };
+  const tabla=(arr,cols)=>'<div class="dic-scroll" style="max-height:230px"><table class="grid" style="font-size:11.5px"><thead><tr>'+cols.map(c=>'<th>'+c[0]+'</th>').join('')+'</tr></thead><tbody>'+arr.map(r=>'<tr>'+cols.map(c=>'<td>'+esc(c[1](r))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+  let h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<span class="badge b-verde">Altas: '+s.altas.length+'</span>'
+    +'<span class="badge b-ambar">Cambios de descripción: '+s.cambios.length+'</span>'
+    +'<span class="badge">Sin cambios: '+s.iguales+'</span>'
+    +'<span class="badge b-rojo">Conflictos: '+s.conflictos.length+'</span></div>';
+  if(s.altas.length) h+='<div style="font-weight:700;font-size:12px;margin:8px 0 4px">Altas nuevas</div>'+tabla(s.altas.slice(0,400),[['Tipo',r=>tipoNom(r.tipo)],['Código',r=>r.cod],['Descripción',r=>r.desc]]);
+  if(s.cambios.length) h+='<div style="font-weight:700;font-size:12px;margin:8px 0 4px">Cambios de descripción</div>'+tabla(s.cambios.slice(0,400),[['Tipo',r=>tipoNom(r.tipo)],['Código',r=>r.cod],['Antes',r=>r.descAnt],['Ahora',r=>r.desc]]);
+  if(s.conflictos.length) h+='<div style="font-weight:700;font-size:12px;margin:8px 0 4px;color:#c62828">Conflictos (mismo código con descripciones distintas entre archivos — resolvé en Tango, no se tocan)</div>'+tabla(s.conflictos.slice(0,400),[['Tipo',r=>tipoNom(r.tipo)],['Código',r=>r.cod],['Descripciones',r=>r.descsArr.join('  |  ')]]);
+  if(!s.altas.length&&!s.cambios.length) h+='<div style="font-size:12px;color:var(--muted);margin-top:8px">No hay altas ni cambios para aplicar.</div>';
+  box.innerHTML=h;
+  const btn=document.getElementById('syncaApplyBtn');
+  if(btn){ if(s.altas.length||s.cambios.length){ btn.textContent='Aplicar ('+(s.altas.length+s.cambios.length)+')'; btn.setAttribute('onclick','syncAuxAplicar()'); } else { btn.textContent='Analizar'; btn.setAttribute('onclick','syncAuxAnalizar()'); } }
+}
+window.renderSyncAuxReport=renderSyncAuxReport;
+
+async function syncAuxAplicar(){
+  const s=SYNC_AUX; if(!s){ return; }
+  const msg=document.getElementById('syncaMsg');
+  const recs=[].concat(
+    s.altas.map(a=>({tipo_cod:a.tipo, cod:a.cod, descripcion:a.desc, habil:'Si'})),
+    s.cambios.map(c=>({tipo_cod:c.tipo, cod:c.cod, descripcion:c.desc, habil:'Si'}))
+  );
+  if(!recs.length){ if(msg)msg.textContent='Nada para aplicar.'; return; }
+  if(DEMO_MODE){
+    recs.forEach(r=>{ const t=String(parseInt(r.tipo_cod,10)); CONTA_DB.auxopc[t]=CONTA_DB.auxopc[t]||[]; const ex=CONTA_DB.auxopc[t].find(o=>String(o.cod).toUpperCase()===r.cod.toUpperCase()); if(ex){ex.desc=r.descripcion;} else CONTA_DB.auxopc[t].push({cod:r.cod,desc:r.descripcion,habil:'Si'}); });
+    if(msg)msg.textContent='Listo (demo): '+recs.length+' aplicados.'; closeModal(); paintDic(); return;
+  }
+  if(msg)msg.textContent='Guardando '+recs.length+' en Supabase…';
+  try{
+    for(let i=0;i<recs.length;i+=500){
+      await sbFetch('/aux_opciones',{method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:JSON.stringify(recs.slice(i,i+500))});
+    }
+    if(msg)msg.textContent='Listo: '+recs.length+' auxiliares actualizados.';
+    await reloadDB(); closeModal(); toast('Auxiliares sincronizados'); paintDic();
+  }catch(e){
+    const em=String(e.message||e);
+    if(msg)msg.textContent=/aux_opciones/i.test(em)?'La tabla aux_opciones necesita clave única en (tipo_cod, cod) para el upsert. Avisá a Pablo.':'Error al guardar: '+em;
+  }
+}
+window.syncAuxAplicar=syncAuxAplicar;
+
 const _SYNC_CLASIF_CAMPOS=['descripcion','habil_comp','habil_tes','habil_vta'];
 
 function syncClasifSetCat(cod, val){ if(!SYNC_CLASIF) return; SYNC_CLASIF.catSel=SYNC_CLASIF.catSel||{}; if(val) SYNC_CLASIF.catSel[cod]=val; else delete SYNC_CLASIF.catSel[cod]; }
@@ -4446,7 +4565,7 @@ function paintDic(){
       +'<div class="dic-scroll"><table class="grid"><thead><tr>'+dicTh('clasif','Código','cod')+dicTh('clasif','Descripción','desc')+dicTh('clasif','Categoría','categoria')+dicTh('clasif','EERR (Aux 02)','eerr')+'<th>Auxiliar</th>'+dicTh('clasif','Cuenta forzada','cuenta_forzada')+habilCol+'</tr></thead><tbody>'
       +rows.map(r=>{ const si=String(r.habil_comp||'').toLowerCase()==='si';
         const gs=idxAuxCod[String(r.cod||'').trim().toUpperCase()]||[];
-        const auxTxt=gs.length?gs.map(g=>'Aux '+g).join(' / '):'—';
+        const auxTxt=_auxDeRegla(r.cod, idxAuxCod);
         const catVal=r.categoria||'';
         const catCell=ROLE.admin
           ? '<td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:3px 5px;max-width:170px" onchange="setClasifCategoria(\''+esc(r.cod)+'\',this.value)">'
@@ -4476,7 +4595,7 @@ function paintDic(){
         return '<tr'+(si?'':' style="opacity:.55"')+'><td><strong>'+esc(r.cod)+'</strong></td><td>'+esc(r.desc)+'</td>'+catCell+eeCell+'<td style="font-size:11.5px;color:var(--muted)">'+esc(auxTxt)+'</td>'+cfCell+cell+'</tr>'; }).join('')
       +(rows.length?'':'<tr><td colspan="7" style="text-align:center;padding:26px 12px;color:var(--muted)">Ningún código coincide con los filtros actuales'+(hayFiltro?'.<br><button class="btn ghost sm" style="margin-top:10px" onclick="clasifLimpiarTodo()">Limpiar todos los filtros</button>':'.')+'</td></tr>')
       +'</tbody></table></div>'
-      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Es lo que en cada renglón define el centro de costos (proyecto, estructura, mantenimiento módulo/reefer, DTM, rodado, etc.). Sale de "Clasificación de comprobantes" de Tango; solo los Habilitados aparecen para elegir al cargar una OG. La columna Auxiliar sale de cruzar el código directo contra los Auxiliares reales (grupos 02 a 08); "Sin auxiliar" son códigos que solo definen el EERR.</div></div>';
+      +'<div style="font-size:11.5px;color:var(--muted);padding:10px 15px">Es lo que en cada renglón define el centro de costos (proyecto, estructura, mantenimiento módulo/reefer, DTM, rodado, etc.). Sale de "Clasificación de comprobantes" de Tango; solo los Habilitados aparecen para elegir al cargar una OG. La columna Auxiliar muestra el auxiliar que corresponde según la regla del motor (03 proyecto, 04 módulo, 05 bs de uso, 06 muebles, 07 herramientas, 08 rodados); un ⚠ significa que el código todavía no existe en el auxiliar real de Tango. "Sin auxiliar" son códigos que solo definen el EERR.</div></div>';
   } else if(DIC_TAB==='opcog'){
     const listCard=(title,arr)=>{ let rows=arr; if(q) rows=rows.filter(x=>String(x).toLowerCase().includes(q));
       return card(title, rows.length+' opciones', '',
@@ -4506,7 +4625,8 @@ function paintDic(){
     let tipos=(CONTA_DB.tipos||[]).filter(t=>verConf||!t.confidencial)
       .sort((a,b)=>(parseInt(a.cod,10)||9999)-(parseInt(b.cod,10)||9999));
     const filtroBtn='<button class="btn ghost sm" onclick="setDicAuxTodos('+(!DIC_AUX_TODOS)+')">'+(DIC_AUX_TODOS?'Mostrar solo habilitados':'Mostrar todos (incluye inhabilitados)')+'</button>';
-    html='<div style="font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>Cada auxiliar de Tango con todas sus opciones. Tocá para desplegar y usá el buscador de cada uno.'+(verConf?' Podés marcar un auxiliar como confidencial (solo lo ven usuarios habilitados).':'')+'</span>'+filtroBtn+'</div>'
+    const syncAuxBtn=ROLE.admin?'<button class="btn sm" onclick="openSyncAux()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:5px;vertical-align:-2px"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>Sincronizar con Tango</button>':'';
+    html='<div style="font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span>Cada auxiliar de Tango con todas sus opciones. Son la base con la que la app arma los auxiliares del asiento. Tocá para desplegar y usá el buscador de cada uno.'+(verConf?' Podés marcar un auxiliar como confidencial (solo lo ven usuarios habilitados).':'')+'</span><span style="margin-left:auto;display:inline-flex;gap:8px">'+syncAuxBtn+filtroBtn+'</span></div>'
       +tipos.map(t=>{
         const opts=auxOpts(t.cod);
         const visibles=DIC_AUX_TODOS?opts:opts.filter(o=>String(o.habil||'').toLowerCase()==='si');
