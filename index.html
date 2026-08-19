@@ -244,7 +244,7 @@ table.grid.usub td,table.grid.usub th{padding:6px 11px;font-size:11.5px;}
   <aside class="side">
     <div class="brand">4housing</div>
     <div class="brand-sub">Compras &amp; Operaciones</div>
-    <div class="brand-sub" style="font-size:10px;opacity:.55;margin-top:2px">build 18-08-2026 · fix falta-alta</div>
+    <div class="brand-sub" style="font-size:10px;opacity:.55;margin-top:2px">build 19-08-2026 · fix asiento por OP</div>
     <nav id="nav"></nav>
     <div class="sp"></div>
     <div class="data-actions">
@@ -2236,35 +2236,40 @@ function auxReqStr(im){ const r=['02']; if(im.aux03)r.push('03'); if(im.aux04)r.
 function asientoRows(ogs, opByOg){
   const rows=[ASIENTO_COLS.slice()];
   ogs.forEach(o=>{
-    const fecha=o.fecha?fmtDate(o.fecha):'';
-    const items=(o.items&&o.items.length)?o.items:[null];
-    items.forEach(it=>{
-      const esOG=it===null;
-      const im=esOG?{cuenta_cod:'',cuenta:'',eerr:'',aux03:'',aux04:'',aux07:'',aux08:''}:imputacion(it);
-      const imp=esOG?ogTotal(o):itemTotal(it);
-      const r=new Array(ASIENTO_COLS.length).fill('');
-      r[0]=fecha; r[1]='EGRESO';
-      r[2]=im.cuenta_cod||''; r[3]=im.cuenta||'';
-      r[4]=esOG?'':auxReqStr(im);
-      r[5]=eerrFmt(im.eerr);
-      r[6]=im.aux03||''; r[7]=im.aux04||''; r[10]=im.aux07||''; r[11]=im.aux08||'';
-      r[14]=o.proveedor_cod||''; r[15]=o.proveedor||'';
-      r[18]=o.solp!=null?o.solp:''; r[19]=o.numero||'';
-      r[20]=esOG?(o.objeto||''):((it.articulo||'')||o.objeto||'');
-      r[21]=0; r[22]=imp; r[23]=-imp;                 // INGRESO / EGRESO / MOVIMIENTO
-      r[25]=_leyRenglon(o, esOG?null:it, opByOg);   // LEYENDA: OP - COD PROV - PROYECTO - OG
-      rows.push(r);
+    const pagosOG=(opByOg&&opByOg[o.id])||[null];   // [null] = sin pago puntual, se toma el 100% de la OG
+    pagosOG.forEach(pago=>{
+      const pct = pago ? (pago.pct!=null && pago.pct!=='' ? +pago.pct : 100) : 100;
+      const opByOgLey = pago ? {[o.id]:pago.op_numero} : opByOg;
+      const fecha=o.fecha?fmtDate(o.fecha):'';
+      const items=(o.items&&o.items.length)?o.items:[null];
+      items.forEach(it=>{
+        const esOG=it===null;
+        const im=esOG?{cuenta_cod:'',cuenta:'',eerr:'',aux03:'',aux04:'',aux07:'',aux08:''}:imputacion(it);
+        const imp=(esOG?ogTotal(o):itemTotal(it))*pct/100;
+        const r=new Array(ASIENTO_COLS.length).fill('');
+        r[0]=fecha; r[1]='EGRESO';
+        r[2]=im.cuenta_cod||''; r[3]=im.cuenta||'';
+        r[4]=esOG?'':auxReqStr(im);
+        r[5]=eerrFmt(im.eerr);
+        r[6]=im.aux03||''; r[7]=im.aux04||''; r[10]=im.aux07||''; r[11]=im.aux08||'';
+        r[14]=o.proveedor_cod||''; r[15]=o.proveedor||'';
+        r[18]=o.solp!=null?o.solp:''; r[19]=o.numero||'';
+        r[20]=esOG?(o.objeto||''):((it.articulo||'')||o.objeto||'');
+        r[21]=0; r[22]=imp; r[23]=-imp;                 // INGRESO / EGRESO / MOVIMIENTO
+        r[25]=_leyRenglon(o, esOG?null:it, opByOgLey);   // LEYENDA: OP - COD PROV - PROYECTO - OG
+        rows.push(r);
+      });
+      // contrapartida por OG (caja según la moneda en que se pagó esta OP; si no hay pago, CAJA PESOS 2), por el importe efectivamente pagado
+      const tot=ogTotal(o)*pct/100;
+      const pgReal=pago||pagosOf(o.id)[0];
+      const caja = pgReal ? CAJAS[pgReal.moneda_pago] : {cod:CONTRAPARTIDA.cod, nombre:CONTRAPARTIDA.nombre};
+      const cr=new Array(ASIENTO_COLS.length).fill('');
+      cr[0]=fecha; cr[1]='EGRESO'; cr[2]=caja.cod; cr[3]=caja.nombre;
+      cr[14]=o.proveedor_cod||''; cr[15]=o.proveedor||''; cr[19]=o.numero||'';
+      cr[20]='Contrapartida OG '+(o.numero||''); cr[21]=tot; cr[22]=0; cr[23]=tot;
+      cr[25]=_leyCaja(o, opByOgLey);
+      rows.push(cr);
     });
-    // contrapartida por OG (caja según la moneda en que se pagó; si no hay pago, CAJA PESOS 2)
-    const tot=ogTotal(o);
-    const pg=pagosOf(o.id)[0];
-    const caja = pg ? CAJAS[pg.moneda_pago] : {cod:CONTRAPARTIDA.cod, nombre:CONTRAPARTIDA.nombre};
-    const cr=new Array(ASIENTO_COLS.length).fill('');
-    cr[0]=fecha; cr[1]='EGRESO'; cr[2]=caja.cod; cr[3]=caja.nombre;
-    cr[14]=o.proveedor_cod||''; cr[15]=o.proveedor||''; cr[19]=o.numero||'';
-    cr[20]='Contrapartida OG '+(o.numero||''); cr[21]=tot; cr[22]=0; cr[23]=tot;
-    cr[25]=_leyCaja(o, opByOg);
-    rows.push(cr);
   });
   return rows;
 }
@@ -2287,9 +2292,11 @@ function opToggleAll(cb){ document.querySelectorAll('.opchk').forEach(c=>{ c.che
 function _selPagosToOgs(){
   const ids=opSelectedPagoIds(); if(!ids.length) return null;
   const pagos=(mem.pagos||[]).filter(p=>ids.includes(String(p.id)));
-  const opByOg={}, seen=[], ogs=[];
+  const byOg={};
   pagos.forEach(p=>{ const og=ogById(p.og_id)||(mem.ogs||[]).find(o=>String(o.numero)===String(p.numero));
-    if(og){ if(opByOg[og.id]==null) opByOg[og.id]=p.op_numero; if(!seen.includes(og.id)){ seen.push(og.id); ogs.push(og); } } });
+    if(og){ (byOg[og.id]=byOg[og.id]||{og,pagos:[]}).pagos.push(p); } });
+  const ogs=[], opByOg={};
+  Object.values(byOg).forEach(g=>{ ogs.push(g.og); opByOg[g.og.id]=g.pagos; }); // opByOg[og.id] = [pago,...] (uno o más si hay pagos parciales seleccionados juntos)
   return {ogs, opByOg};
 }
 function exportAsientoSelTango(){
@@ -2610,36 +2617,43 @@ function asientoTangoSheets(ogs, opByOg){
   const auxH=['Identificador','Nro. renglón','Código tipo auxiliar','Tipo auxiliar','Código auxiliar','Descripción auxiliar','Porcentaje','Importe','Leyenda'];
   const cab=[cabH], ren=[renH], cot=[cotH], aux=[auxH];
   ogs.forEach(o=>{
-    const id=o.numero||o.id;                              // Identificador = N° OG
-    const monCode=ogMonedaCode(o)==='USD'?'DOL':'PES';
-    let fecha=o.fecha||''; try{ if(/^\d{4}-\d{2}-\d{2}/.test(o.fecha)) fecha=new Date(o.fecha+'T00:00:00'); }catch(e){}
-    const concepto=_leyCaja(o,opByOg);   // Concepto cabecera: OP - COD PROV - OG (mismo estilo que la leyenda)
-    cab.push([id, fecha, ASIENTO_CLASE, ASIENTO_TIPO_CN, ASIENTO_ESTADO_DEF, monCode, concepto, '', (o.solp!=null?o.solp:''), (o.numero||''), '', 'No', '']);
-    // renglones de gasto (uno por renglón de la OG) → al DEBE
-    let nro=0;
-    (o.items||[]).forEach(it=>{
-      const im=imputacion(it); const imp=itemTotal(it);
+    const pagosOG=(opByOg&&opByOg[o.id])||[null];               // [null] = sin pago puntual, se toma el 100% de la OG (preview desde "Ver imputación")
+    const multi=pagosOG.length>1;                                 // 2+ pagos de la MISMA OG seleccionados juntos: hay que separarlos en asientos distintos
+    pagosOG.forEach(pago=>{
+      const pct = pago ? (pago.pct!=null && pago.pct!=='' ? +pago.pct : 100) : 100;   // % de la OG que cubre ESTE pago (viene de tesorería)
+      const id = multi ? (o.numero||o.id)+'-OP'+(pago&&pago.op_numero!=null?pago.op_numero:'') : (o.numero||o.id); // SUPUESTO: si hay 2+ pagos de la misma OG en la misma exportación, se compone el Identificador con "-OP" para no duplicar filas en Tango; confirmar con Axoft si acepta identificador alfanumérico.
+      const opByOgLey = pago ? {[o.id]:pago.op_numero} : opByOg;  // para que la leyenda siga mostrando "OP N - ..."
+      const monCode=ogMonedaCode(o)==='USD'?'DOL':'PES';
+      let fecha=o.fecha||''; try{ if(/^\d{4}-\d{2}-\d{2}/.test(o.fecha)) fecha=new Date(o.fecha+'T00:00:00'); }catch(e){}
+      const concepto=_leyCaja(o,opByOgLey);   // Concepto cabecera: OP - COD PROV - OG (mismo estilo que la leyenda)
+      cab.push([id, fecha, ASIENTO_CLASE, ASIENTO_TIPO_CN, ASIENTO_ESTADO_DEF, monCode, concepto, '', (o.solp!=null?o.solp:''), (o.numero||''), '', 'No', '']);
+      // renglones de gasto (uno por renglón de la OG, prorrateado por el % efectivamente pagado en esta OP) → al DEBE
+      let nro=0;
+      (o.items||[]).forEach(it=>{
+        const im=imputacion(it); const imp=itemTotal(it)*pct/100;
+        nro++;
+        const leyenda=_leyRenglon(o,it,opByOgLey);
+        ren.push([id, nro, im.cuenta_cod||'', imp, '', fecha, leyenda, '', '', 'No', '']);
+        // auxiliares de ese renglón
+        if(im.eerr){ const c=EERR_COD[im.eerr]||''; aux.push([id,nro,'02','EERR',c,im.eerr,100,imp,leyenda]); }               // Aux 02 EERR (obligatorio)
+        if(im.aux03){ aux.push([id,nro,'03','INSTRUCTIVO DE FABRICACION',im.aux03,auxDescLookup('3',im.aux03),100,imp,leyenda]); } // Aux 03 proyecto
+        if(im.aux04){ const mods=String(im.aux04).split(' | ').filter(Boolean); const n=mods.length; const p=n===1?100:''; // SUPUESTO: si hay >1 módulo, el % lo definís vos
+          const impMod = n? imp/n : imp;   // FIX: el importe del renglón se prorratea entre los módulos, no se repite entero en cada uno
+          mods.forEach(m=>aux.push([id,nro,'04','CONTENEDOR/MODULO',m,auxDescLookup('4',m),p,impMod,leyenda])); }
+        if(im.aux08){ aux.push([id,nro,'08','RODADOS',im.aux08,auxDescLookup('8',im.aux08),100,imp,leyenda]); }               // Aux 08 rodado
+        if(im.aux05){ aux.push([id,nro,'05','MANTENIMIENTO BS DE USO',im.aux05,auxDescLookup('5',im.aux05),100,imp,leyenda]); } // Aux 05 bien de uso
+        if(im.aux06){ aux.push([id,nro,'06','MUEBLES Y UTILES',im.aux06,auxDescLookup('6',im.aux06),100,imp,leyenda]); }        // Aux 06 mueble
+        if(im.aux07){ aux.push([id,nro,'07','HERRAMIENTAS',im.aux07,auxDescLookup('7',im.aux07),100,imp,leyenda]); }            // Aux 07 herramienta
+      });
+      // contrapartida de caja (según lo efectivamente pagado en esta OP, no el total de la OG) → al HABER
+      const tot=ogTotal(o)*pct/100;
+      const pgReal=pago||pagosOf(o.id)[0];
+      const caja = pgReal&&CAJAS[pgReal.moneda_pago] ? CAJAS[pgReal.moneda_pago] : (monCode==='DOL'?CAJAS.USD:CAJAS.ARS);
       nro++;
-      const leyenda=_leyRenglon(o,it,opByOg);
-      ren.push([id, nro, im.cuenta_cod||'', imp, '', fecha, leyenda, '', '', 'No', '']);
-      // auxiliares de ese renglón
-      if(im.eerr){ const c=EERR_COD[im.eerr]||''; aux.push([id,nro,'02','EERR',c,im.eerr,100,imp,leyenda]); }               // Aux 02 EERR (obligatorio)
-      if(im.aux03){ aux.push([id,nro,'03','INSTRUCTIVO DE FABRICACION',im.aux03,auxDescLookup('3',im.aux03),100,imp,leyenda]); } // Aux 03 proyecto
-      if(im.aux04){ const mods=String(im.aux04).split(' | ').filter(Boolean); const p=mods.length===1?100:''; // SUPUESTO: si hay >1 módulo, el % lo definís vos
-        mods.forEach(m=>aux.push([id,nro,'04','CONTENEDOR/MODULO',m,auxDescLookup('4',m),p,imp,leyenda])); }
-      if(im.aux08){ aux.push([id,nro,'08','RODADOS',im.aux08,auxDescLookup('8',im.aux08),100,imp,leyenda]); }               // Aux 08 rodado
-      if(im.aux05){ aux.push([id,nro,'05','MANTENIMIENTO BS DE USO',im.aux05,auxDescLookup('5',im.aux05),100,imp,leyenda]); } // Aux 05 bien de uso
-      if(im.aux06){ aux.push([id,nro,'06','MUEBLES Y UTILES',im.aux06,auxDescLookup('6',im.aux06),100,imp,leyenda]); }        // Aux 06 mueble
-      if(im.aux07){ aux.push([id,nro,'07','HERRAMIENTAS',im.aux07,auxDescLookup('7',im.aux07),100,imp,leyenda]); }            // Aux 07 herramienta
+      ren.push([id, nro, caja.cod, '', tot, fecha, _leyCaja(o,opByOgLey), '', '', 'No', '']);
+      // cotización (solo si el asiento es en dólares) → SUPUESTO: usa el TC de la OG
+      if(monCode==='DOL'){ const tc=o.tc_pesos||o.tc||''; cot.push([id,'DOL','COTIZACIÓN',tc,'No','']); }
     });
-    // contrapartida de caja (total OG) → al HABER
-    const tot=ogTotal(o);
-    const pg=pagosOf(o.id)[0];
-    const caja = pg&&CAJAS[pg.moneda_pago] ? CAJAS[pg.moneda_pago] : (monCode==='DOL'?CAJAS.USD:CAJAS.ARS);
-    nro++;
-    ren.push([id, nro, caja.cod, '', tot, fecha, _leyCaja(o,opByOg), '', '', 'No', '']);
-    // cotización (solo si el asiento es en dólares) → SUPUESTO: usa el TC de la OG
-    if(monCode==='DOL'){ const tc=o.tc_pesos||o.tc||''; cot.push([id,'DOL','COTIZACIÓN',tc,'No','']); }
   });
   return {cab,ren,cot,aux};
 }
