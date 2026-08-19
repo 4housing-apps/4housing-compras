@@ -4301,6 +4301,16 @@ function _enrichSeries(familia){
 }
 // Cruce Código de Clasificación -> grupo de Auxiliar (02 EERR, 03 Instructivo, 04 Módulo, 05 Mant. Bs Uso, 06 Muebles, 07 Herramientas, 08 Rodados).
 // Acá la clave es el CÓDIGO directo (no la serie): para clasificación, código de clasificación = código de auxiliar.
+function _lazyFillCtaSelect(sel){
+  if(sel.dataset.filled==='1') return;
+  const cfVal=sel.dataset.cur||'';
+  let html='<option value=""'+(cfVal===''?' selected':'')+'>— según artículo —</option>'
+    +(CONTA_DB.cuentas||[]).filter(c=>String(c.habil||'').toLowerCase()!=='no').map(c=>'<option value="'+esc(c.cod)+'"'+(String(c.cod)===String(cfVal)?' selected':'')+'>'+esc(c.cod+' - '+(c.desc||''))+'</option>').join('');
+  if(cfVal && !(CONTA_DB.cuentas||[]).some(c=>String(c.cod)===String(cfVal))) html+='<option value="'+esc(cfVal)+'" selected>'+esc(cfVal)+'</option>';
+  sel.innerHTML=html;
+  sel.dataset.filled='1';
+}
+window._lazyFillCtaSelect=_lazyFillCtaSelect;
 function _clasifCodigoAGrupos(){
   const idx={};
   [['02','2'],['03','3'],['04','4'],['05','5'],['06','6'],['07','7'],['08','8']].forEach(function(p){
@@ -4587,11 +4597,10 @@ function paintDic(){
               +'</select></td>'
           : '<td style="font-size:11px;color:var(--muted)">'+esc(eerrFmt(eeVal)||'—')+'</td>';
         const cfVal=r.cuenta_forzada||'';
+        const cfCurLabel=cfVal?esc(cfVal+' - '+(( (CONTA_DB.cuentas||[]).find(c=>String(c.cod)===String(cfVal))||{}).desc||'')):'— según artículo —';
         const cfCell=ROLE.admin
-          ? '<td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:3px 5px;max-width:210px" onchange="setClasifCtaForz(\''+esc(r.cod)+'\',this.value)">'
-              +'<option value=""'+(cfVal===''?' selected':'')+'>— según artículo —</option>'
-              +(CONTA_DB.cuentas||[]).filter(c=>String(c.habil||'').toLowerCase()!=='no').map(c=>'<option value="'+esc(c.cod)+'"'+(String(c.cod)===String(cfVal)?' selected':'')+'>'+esc(c.cod+' - '+(c.desc||''))+'</option>').join('')
-              +(cfVal&&!(CONTA_DB.cuentas||[]).some(c=>String(c.cod)===String(cfVal))?'<option value="'+esc(cfVal)+'" selected>'+esc(cfVal)+'</option>':'')
+          ? '<td><select style="font-size:11px;border:1px solid var(--line-strong);border-radius:6px;padding:3px 5px;max-width:210px" data-cod="'+esc(r.cod)+'" data-cur="'+esc(cfVal)+'" onfocus="_lazyFillCtaSelect(this)" onchange="setClasifCtaForz(\''+esc(r.cod)+'\',this.value)">'
+              +'<option value="'+esc(cfVal)+'" selected>'+cfCurLabel+'</option>'
               +'</select></td>'
           : '<td style="font-size:11px;color:var(--muted)">'+esc(_ctaLabel(cfVal)||'—')+'</td>';
         const cell=ROLE.admin?'<td style="text-align:center"><input type="checkbox" '+(si?'checked':'')+' onclick="toggleHabilClasif(\''+esc(r.cod)+'\')"></td>'
